@@ -1,104 +1,136 @@
+// ===============================
 // metrics.js
-
-let previousLandmarks = null;
+// Multi-layer Synthetic Detection
+// ===============================
 
 // -----------------------------
 // Utility: Euclidean distance
 // -----------------------------
 function distance(p1, p2) {
-	const dx = p2._x - p1._x;
-	const dy = p2._y - p1._y;
-	return Math.sqrt(dx * dx + dy * dy);
+  const dx = p2._x - p1._x;
+  const dy = p2._y - p1._y;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 // -----------------------------
-// Smooth value helper
-// -----------------------------
-function createSmoother(alpha = 0.8) {
-	let last = 0;
-
-	return function smooth(value) {
-		last = alpha * last + (1 - alpha) * value;
-		return last;
-	};
-}
-
-// Create internal smoothers
-const smoothMouth = createSmoother(0.8);
-const smoothInstability = createSmoother(0.8);
-
-// -----------------------------
-// Compute Mouth Open (Normalized)
-// -----------------------------
-export function computeMouthOpen(landmarks) {
-	if (!landmarks) return 0;
-
-	const topLip = landmarks[62];
-	const bottomLip = landmarks[66];
-
-	const rawDistance = distance(topLip, bottomLip);
-
-	// Normalize by face width (jaw 0 → 16)
-	const faceWidth = distance(landmarks[0], landmarks[16]);
-
-	const normalized = rawDistance / faceWidth;
-
-	return smoothMouth(normalized);
-}
-
-// -----------------------------
-// Compute Face Instability
-// Measures small frame-to-frame movement
+// Behavioral Instability
 // -----------------------------
 let previousNose = null;
 
-export function computeInstability(landmarks) {
-	if (!landmarks || landmarks.length === 0) return 0;
+export function computeBehavioralScore(landmarks) {
+  if (!landmarks) return 0;
 
-	// First frame — nothing to compare yet
-	if (!previousLandmarks) {
-		previousLandmarks = landmarks.map((p) => ({ x: p.x, y: p.y }));
-		return 0;
-	}
+  const nose = landmarks[30];
 
-	let totalMovement = 0;
+  if (!previousNose) {
+    previousNose = nose;
+    return 0;
+  }
 
-	for (let i = 0; i < landmarks.length; i++) {
-		const dx = landmarks[i].x - previousLandmarks[i].x;
-		const dy = landmarks[i].y - previousLandmarks[i].y;
+  const movement = distance(nose, previousNose);
+  previousNose = nose;
 
-		totalMovement += Math.sqrt(dx * dx + dy * dy);
-	}
-
-	// Average movement per landmark
-	const rawInstability = totalMovement / landmarks.length;
-
-	// Smooth the instability signal
-	const smoothed = smoothInstability(rawInstability);
-
-	// Store current landmarks for next frame
-	previousLandmarks = landmarks.map((p) => ({ x: p.x, y: p.y }));
-
-	return smoothed;
+  // Normalize (15px typical movement max)
+  return Math.min(movement / 15, 1);
 }
 
 // -----------------------------
-// Basic Risk Score Example
+// Structural Score
 // -----------------------------
-export function computeRisk(instability, mouthOpen) {
-	// Normalize instability (assume typical max around 15px)
-	const normInstability = Math.min(instability / 15, 1);
+export function computeStructuralScore(landmarks) {
+  if (!landmarks) return 0;
 
-	// Normalize mouth (assume typical max around 0.5)
-	const normMouth = Math.min(mouthOpen / 0.5, 1);
+  const leftEye = landmarks[36];
+  const rightEye = landmarks[45];
+  const nose = landmarks[30];
+  const jawLeft = landmarks[0];
+  const jawRight = landmarks[16];
 
-	const risk = normInstability * 0.6 + normMouth * 0.4;
+  // Symmetry
+  const leftDist = Math.abs(leftEye._x - nose._x);
+  const rightDist = Math.abs(rightEye._x - nose._x);
+  const symmetryDiff = Math.abs(leftDist - rightDist);
 
-	return risk;
+  const symmetryScore = 1 - Math.min(symmetryDiff / 20, 1);
+
+  // Eye ratio
+  const eyeDistance = Math.abs(rightEye._x - leftEye._x);
+  const faceWidth = Math.abs(jawRight._x - jawLeft._x);
+  const ratio = eyeDistance / faceWidth;
+
+  const idealRatio = 0.45;
+  const ratioDiff = Math.abs(ratio - idealRatio);
+  const ratioScore = 1 - Math.min(ratioDiff / 0.15, 1);
+
+  return (symmetryScore + ratioScore) / 2;
 }
 
-export function getRiskLabel(risk) {
-	if (risk < 0.2) return "Low";
-	if (risk < 0.5) return "Medium";
-	return "High";
+// -----------------------------
+// Texture Score (Over-smoothing)
+// -----------------------------
+export function computeTextureScore(imageElement) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  canvas.width = imageElement.width;
+  canvas.height = imageElement.height;
+
+  ctx.drawImage(imageElement, 0, 0);
+
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+  let mean = 0;
+  let variance = 0;
+  const totalPixels = data.length / 4;
+
+  // Compute mean grayscale
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+    mean += gray;
+  }
+
+  mean /= totalPixels;
+
+  // Compute variance
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+    variance += Math.pow(gray - mean, 2);
+  }
+
+  variance /= totalPixels;
+
+  // AI images often overly smooth → low variance
+  const normalized = 1 - Math.min(variance / 2000, 1);
+
+  return normalized;
+}
+
+// -----------------------------
+// Final Risk Combiner
+// -----------------------------
+export function computeFinalRisk({
+  structural,
+  texture,
+  behavioral,
+  source
+}) {
+  let score;
+
+  if (source === "image") {
+    score = 0.6 * structural + 0.4 * texture;
+  } else {
+    // live or video
+    score = 0.4 * structural + 0.4 * behavioral + 0.2 * texture;
+  }
+
+  return Math.min(Math.max(score, 0), 1);
+}
+
+// -----------------------------
+// Risk Label
+// -----------------------------
+export function getRiskLabel(score) {
+  if (score < 0.3) return "Likely Human";
+  if (score < 0.6) return "Possibly Synthetic";
+  return "Likely AI Generated";
 }
