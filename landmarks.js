@@ -1,23 +1,17 @@
 let modelsLoaded = false;
 
-export async function loadModels() {
+async function loadModels() {
 	if (modelsLoaded) return;
 
-	const MODEL_URL = "/models";
-
-	await Promise.all([
-		faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-		faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-	]);
+	await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
+	await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
 
 	modelsLoaded = true;
 	console.log("Models loaded");
 }
 
 export async function detectLandmarks(videoElement) {
-	if (!modelsLoaded) {
-		await loadModels();
-	}
+	await loadModels();
 
 	const result = await faceapi
 		.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
@@ -25,5 +19,5 @@ export async function detectLandmarks(videoElement) {
 
 	if (!result) return null;
 
-	return result.landmarks.positions;
+	return result.landmarks.positions; // 68 landmark points
 }

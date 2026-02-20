@@ -17,14 +17,13 @@ startWebcam(video)
 	})
 	.catch((err) => console.error("Camera error:", err));
 
-async function startDetection() {
+function startDetection() {
 	async function detect() {
 		const landmarks = await detectLandmarks(video);
 
 		if (landmarks) {
 			const mouthOpen = computeMouthOpen(landmarks);
 			const instability = computeInstability(landmarks);
-
 			const risk = computeRisk(instability, mouthOpen);
 			const label = getRiskLabel(risk);
 
