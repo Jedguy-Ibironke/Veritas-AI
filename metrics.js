@@ -1,5 +1,7 @@
 // metrics.js
 
+let previousLandmarks = null;
+
 // -----------------------------
 // Utility: Euclidean distance
 // -----------------------------
@@ -51,19 +53,33 @@ export function computeMouthOpen(landmarks) {
 let previousNose = null;
 
 export function computeInstability(landmarks) {
-	if (!landmarks) return 0;
+	if (!landmarks || landmarks.length === 0) return 0;
 
-	const nose = landmarks[30]; // center nose point
-
-	if (!previousNose) {
-		previousNose = nose;
+	// First frame — nothing to compare yet
+	if (!previousLandmarks) {
+		previousLandmarks = landmarks.map((p) => ({ x: p.x, y: p.y }));
 		return 0;
 	}
 
-	const movement = distance(nose, previousNose);
-	previousNose = nose;
+	let totalMovement = 0;
 
-	return smoothInstability(movement);
+	for (let i = 0; i < landmarks.length; i++) {
+		const dx = landmarks[i].x - previousLandmarks[i].x;
+		const dy = landmarks[i].y - previousLandmarks[i].y;
+
+		totalMovement += Math.sqrt(dx * dx + dy * dy);
+	}
+
+	// Average movement per landmark
+	const rawInstability = totalMovement / landmarks.length;
+
+	// Smooth the instability signal
+	const smoothed = smoothInstability(rawInstability);
+
+	// Store current landmarks for next frame
+	previousLandmarks = landmarks.map((p) => ({ x: p.x, y: p.y }));
+
+	return smoothed;
 }
 
 // -----------------------------
