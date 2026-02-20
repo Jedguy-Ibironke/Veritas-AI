@@ -1,17 +1,19 @@
 <!doctype html>
 <html>
 	<head>
-		<title>Face Test</title>
+		<title>Face Metrics</title>
 	</head>
 	<body>
-		<video id="video" autoplay muted playsinline></video>
+		<h2>Live Face Metrics</h2>
 
-		<!-- Load FaceAPI FIRST -->
-		<script
-			defer
-			src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+		<video id="video" autoplay muted width="640" height="480"></video>
 
-		<!-- Then your code -->
-		<script type="module" src="main.js"></script>
+		<pre id="status"></pre>
+
+		<!-- Face API -->
+		<script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
+		<!-- Your App -->
+		<script type="module" src="./main.js"></script>
 	</body>
 </html>
