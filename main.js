@@ -1,9 +1,30 @@
-const instability = computeInstability(landmarks);
-const mouthOpen = computeMouthOpen(landmarks);
-const audioLevel = computeAudioLevel(analyser);
-const lipMismatch = computeLipSyncMismatch(mouthOpen, audioLevel);
+/*
+import { startWebcam } from "./camera.js";
+import { detectLandmarks } from "./landmarks.js";
 
-const risk = computeRisk(instability, lipMismatch);
-const label = getRiskLabel(risk);
+const video = document.getElementById("video");
 
-console.log("Risk:", risk, label);
+startWebcam(video)
+	.then(() => {
+		console.log("Camera started");
+
+		setInterval(async () => {
+			const landmarks = await detectLandmarks(video);
+			console.log(landmarks);
+		}, 500);
+	})
+	.catch((err) => console.error("Camera error:", err));
+*/
+import { startWebcam } from "./camera.js";
+import { detectLandmarks } from "./landmarks.js";
+
+const video = document.getElementById("video");
+
+startWebcam(video).then(() => {
+	console.log("Camera started");
+
+	setInterval(async () => {
+		const landmarks = await detectLandmarks(video);
+		console.log("Landmarks:", landmarks);
+	}, 1000);
+});

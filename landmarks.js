@@ -1,9 +1,29 @@
+let modelsLoaded = false;
+
+export async function loadModels() {
+	if (modelsLoaded) return;
+
+	const MODEL_URL = "/models";
+
+	await Promise.all([
+		faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+		faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+	]);
+
+	modelsLoaded = true;
+	console.log("Models loaded");
+}
+
 export async function detectLandmarks(videoElement) {
-  const result = await faceapi
-    .detectSingleFace(videoElement)
-    .withFaceLandmarks();
+	if (!modelsLoaded) {
+		await loadModels();
+	}
 
-  if (!result) return null;
+	const result = await faceapi
+		.detectSingleFace(videoElement, new faceapi.TinyFaceDetectorOptions())
+		.withFaceLandmarks();
 
-  return result.landmarks.positions; // array of 68 points
+	if (!result) return null;
+
+	return result.landmarks.positions;
 }

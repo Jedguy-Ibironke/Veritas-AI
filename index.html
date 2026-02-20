@@ -1,42 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <meta charset="UTF-8" />
-  <title>Deepfake Detector</title>
-  <style>
-    body {
-      margin: 0;
-      background: black;
-      color: white;
-      text-align: center;
-      font-family: Arial, sans-serif;
-    }
+	<head>
+		<title>Face Test</title>
+	</head>
+	<body>
+		<video id="video" autoplay muted playsinline></video>
 
-    video, canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
+		<!-- Load FaceAPI FIRST -->
+		<script
+			defer
+			src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
-    #status {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      padding: 10px 20px;
-      font-weight: bold;
-      border-radius: 8px;
-      background: green;
-    }
-  </style>
-</head>
-<body>
-
-  <div id="status">LOW</div>
-
-  <video id="video" width="640" height="480" autoplay muted></video>
-  <canvas id="overlay" width="640" height="480"></canvas>
-
-  <script type="module" src="./main.js"></script>
-
-</body>
+		<!-- Then your code -->
+		<script type="module" src="main.js"></script>
+	</body>
 </html>
