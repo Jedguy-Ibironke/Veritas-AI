@@ -1,2 +1,2 @@
 # Veritas-AI
-Hackathon project for Video Call Deepfake detection
+Hackathon project for Deepfake detection
