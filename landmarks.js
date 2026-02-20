@@ -1,3 +1,5 @@
+import * as faceapi from "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js";
+
 let modelsLoaded = false;
 
 async function loadModels() {
