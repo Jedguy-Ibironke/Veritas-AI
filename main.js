@@ -35,8 +35,8 @@ function handleModeChange() {
     startWebcam();
   } else {
     fileInput.style.display = "inline";
-    imagePreview.style.display = "none";
     video.style.display = "none";
+    imagePreview.style.display = "none";
   }
 }
 
@@ -51,6 +51,7 @@ async function startWebcam() {
   video.srcObject = stream;
 
   video.onloadedmetadata = () => {
+    video.play();
     startDetection(video);
   };
 }
@@ -63,6 +64,8 @@ function handleFileUpload(event) {
   if (!file) return;
 
   const url = URL.createObjectURL(file);
+
+  stopDetection();
 
   if (currentMode === "image") {
     imagePreview.src = url;
@@ -78,6 +81,7 @@ function handleFileUpload(event) {
     video.style.display = "block";
 
     video.onloadedmetadata = () => {
+      video.play();
       startDetection(video);
     };
   }
@@ -90,24 +94,34 @@ function startDetection(element) {
   stopDetection();
 
   detectionInterval = setInterval(async () => {
-    const landmarks = await detectLandmarks(element);
-    if (!landmarks) return;
+    try {
+      const landmarks = await detectLandmarks(element);
+      if (!landmarks) return;
 
-    const structural = computeStructuralScore(landmarks);
-    const texture = computeTextureScore(element);
-    const behavioral =
-      currentMode === "live" || currentMode === "video"
-        ? computeBehavioralScore(landmarks)
-        : 0;
+      const structural = computeStructuralScore(landmarks);
 
-    const risk = computeFinalRisk({
-      structural,
-      texture,
-      behavioral,
-      source: currentMode
-    });
+      const texture =
+        currentMode === "image"
+          ? computeTextureScore(element)
+          : computeTextureScore(element);
 
-    updateRiskUI(risk, structural, texture, behavioral);
+      const behavioral =
+        currentMode === "live" || currentMode === "video"
+          ? computeBehavioralScore(landmarks)
+          : 0;
+
+      const risk = computeFinalRisk({
+        structural,
+        texture,
+        behavioral,
+        source: currentMode
+      });
+
+      updateRiskUI(risk, structural, texture, behavioral);
+
+    } catch (err) {
+      console.error("Detection error:", err);
+    }
   }, 300);
 }
 
@@ -120,4 +134,35 @@ function stopDetection() {
 
 // ===============================
 // Risk UI
-// =================
+// ===============================
+function updateRiskUI(risk, structural, texture, behavioral) {
+  if (!riskBar || !status) return;
+
+  const percentage = (risk * 100).toFixed(0);
+
+  // Update width
+  riskBar.style.width = `${percentage}%`;
+
+  // Color coding
+  if (risk < 0.3) {
+    riskBar.style.backgroundColor = "green";
+  } else if (risk < 0.6) {
+    riskBar.style.backgroundColor = "orange";
+  } else {
+    riskBar.style.backgroundColor = "red";
+  }
+
+  // Status text
+  status.innerText = `
+Structural: ${structural.toFixed(2)}
+Texture: ${texture.toFixed(2)}
+Behavioral: ${behavioral.toFixed(2)}
+Final Risk: ${risk.toFixed(2)} (${percentage}%)
+Label: ${getRiskLabel(risk)}
+`;
+}
+
+// ===============================
+// Initialize Default Mode
+// ===============================
+handleModeChange();
