@@ -1,147 +1,123 @@
-import { startWebcam } from "./camera.js";
 import { detectLandmarks } from "./landmarks.js";
 import {
-  computeMouthOpen,
-  computeInstability,
-  computeRisk,
-  getRiskLabel,
+  computeStructuralScore,
+  computeTextureScore,
+  computeBehavioralScore,
+  computeFinalRisk,
+  getRiskLabel
 } from "./metrics.js";
 
 const video = document.getElementById("video");
 const imagePreview = document.getElementById("imagePreview");
-const status = document.getElementById("status");
-const modeSelect = document.getElementById("modeSelect");
 const fileInput = document.getElementById("fileInput");
+const modeSelect = document.getElementById("modeSelect");
 const riskBar = document.getElementById("riskBar");
+const status = document.getElementById("status");
 
-let detectionRunning = false;
+let currentMode = "live";
+let detectionInterval = null;
 
-/* =========================
-   MODE SWITCHING
-========================= */
-
+// ===============================
+// Mode Switching
+// ===============================
 modeSelect.addEventListener("change", handleModeChange);
 fileInput.addEventListener("change", handleFileUpload);
 
 function handleModeChange() {
-  const mode = modeSelect.value;
+  currentMode = modeSelect.value;
 
   stopDetection();
 
-  if (mode === "live") {
+  if (currentMode === "live") {
     fileInput.style.display = "none";
     imagePreview.style.display = "none";
     video.style.display = "block";
-    startWebcam(video).then(startDetection);
+    startWebcam();
   } else {
     fileInput.style.display = "inline";
-    video.style.display = "none";
     imagePreview.style.display = "none";
+    video.style.display = "none";
   }
 }
 
-/* =========================
-   FILE UPLOAD
-========================= */
+// ===============================
+// Webcam
+// ===============================
+async function startWebcam() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: true
+  });
 
+  video.srcObject = stream;
+
+  video.onloadedmetadata = () => {
+    startDetection(video);
+  };
+}
+
+// ===============================
+// File Upload
+// ===============================
 function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   const url = URL.createObjectURL(file);
 
-  if (file.type.startsWith("image")) {
+  if (currentMode === "image") {
     imagePreview.src = url;
     imagePreview.style.display = "block";
-    analyzeImage();
+
+    imagePreview.onload = () => {
+      startDetection(imagePreview);
+    };
   }
 
-  if (file.type.startsWith("video")) {
+  if (currentMode === "video") {
     video.src = url;
     video.style.display = "block";
-    video.play();
-    startDetection();
+
+    video.onloadedmetadata = () => {
+      startDetection(video);
+    };
   }
 }
 
-/* =========================
-   LIVE / VIDEO DETECTION
-========================= */
+// ===============================
+// Detection Loop
+// ===============================
+function startDetection(element) {
+  stopDetection();
 
-function startDetection() {
-  detectionRunning = true;
+  detectionInterval = setInterval(async () => {
+    const landmarks = await detectLandmarks(element);
+    if (!landmarks) return;
 
-  async function detect() {
-    if (!detectionRunning) return;
+    const structural = computeStructuralScore(landmarks);
+    const texture = computeTextureScore(element);
+    const behavioral =
+      currentMode === "live" || currentMode === "video"
+        ? computeBehavioralScore(landmarks)
+        : 0;
 
-    const landmarks = await detectLandmarks(video);
+    const risk = computeFinalRisk({
+      structural,
+      texture,
+      behavioral,
+      source: currentMode
+    });
 
-    if (landmarks) {
-      processMetrics(landmarks);
-    }
-
-    requestAnimationFrame(detect);
-  }
-
-  detect();
+    updateRiskUI(risk, structural, texture, behavioral);
+  }, 300);
 }
 
 function stopDetection() {
-  detectionRunning = false;
-}
-
-/* =========================
-   IMAGE ANALYSIS
-========================= */
-
-async function analyzeImage() {
-  const landmarks = await detectLandmarks(imagePreview);
-
-  if (!landmarks) return;
-
-  processMetrics(landmarks, true);
-}
-
-/* =========================
-   METRIC PROCESSING
-========================= */
-
-function processMetrics(landmarks, isImage = false) {
-  const mouthOpen = computeMouthOpen(landmarks);
-  const instability = isImage ? 0 : computeInstability(landmarks);
-
-  const risk = computeRisk(instability, mouthOpen);
-  const label = getRiskLabel(risk);
-
-  updateRiskBar(risk);
-
-  status.innerText = `
-Mouth: ${mouthOpen.toFixed(3)}
-Instability: ${instability.toFixed(3)}
-Risk: ${risk.toFixed(3)} (${label})
-  `;
-}
-
-/* =========================
-   🔥 HACKATHON BOOST
-   RISK BAR VISUALIZER
-========================= */
-
-function updateRiskBar(risk) {
-  const percent = Math.min(risk * 100, 100);
-  riskBar.style.width = percent + "%";
-
-  if (risk < 0.2) {
-    riskBar.style.background = "green";
-  } else if (risk < 0.5) {
-    riskBar.style.background = "orange";
-  } else {
-    riskBar.style.background = "red";
+  if (detectionInterval) {
+    clearInterval(detectionInterval);
+    detectionInterval = null;
   }
 }
 
-/* =========================
-   START DEFAULT MODE
-========================= */
-
-handleModeChange();
+// ===============================
+// Risk UI
+// =================
