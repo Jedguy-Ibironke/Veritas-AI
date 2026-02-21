@@ -1,27 +1,256 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Webcam Test</title>
+    <title>Veritas-AI Full Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+            padding: 20px;
+        }
+        .success { color: #00ff00; }
+        .error { color: #ff5555; }
+        .info { color: #ffff00; }
+        pre {
+            background: #222;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        button {
+            background: #333;
+            color: white;
+            border: 1px solid #666;
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #444;
+        }
+        #video {
+            border: 2px solid #333;
+            border-radius: 10px;
+            margin-top: 20px;
+            max-width: 100%;
+        }
+        #output {
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
-  <h2>Webcam Test</h2>
-  <video id="video" autoplay width="640" height="480"></video>
-
-  <script>
-    const video = document.getElementById('video');
-
-    async function startWebcam() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        console.log('Webcam started ✅');
-      } catch (err) {
-        console.error('Webcam error:', err);
-        alert('Could not access webcam. Make sure permissions are allowed.');
-      }
-    }
-
-    startWebcam();
-  </script>
+    <h1>🔍 Veritas-AI Diagnostic Tool</h1>
+    
+    <div id="status"></div>
+    
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="testWebcam()">Test Webcam Only</button>
+    <button onclick="testModels()">Test Models Only</button>
+    <button onclick="clearOutput()">Clear Output</button>
+    
+    <div id="output">
+        <h3>Test Results:</h3>
+        <pre id="results">Click "Run All Tests" to start...</pre>
+    </div>
+    
+    <video id="video" autoplay muted width="640" height="480" style="display:none;"></video>
+    
+    <!-- Load face-api.js -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    
+    <script>
+        const resultsEl = document.getElementById('results');
+        const videoEl = document.getElementById('video');
+        let testStream = null;
+        
+        function log(message, type = 'info') {
+            const color = type === 'success' ? '#00ff00' : 
+                         type === 'error' ? '#ff5555' : '#ffff00';
+            resultsEl.innerHTML += `<span style="color: ${color}">${message}</span>\n`;
+            resultsEl.scrollTop = resultsEl.scrollHeight;
+        }
+        
+        function clearOutput() {
+            resultsEl.innerHTML = '';
+        }
+        
+        async function testWebcam() {
+            log('\n📹 Testing Webcam...', 'info');
+            
+            try {
+                // Stop any existing stream
+                if (testStream) {
+                    testStream.getTracks().forEach(track => track.stop());
+                }
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true,
+                    audio: false 
+                });
+                
+                testStream = stream;
+                videoEl.srcObject = stream;
+                videoEl.style.display = 'block';
+                
+                // Check video tracks
+                const videoTracks = stream.getVideoTracks();
+                if (videoTracks.length > 0) {
+                    log(`✅ Webcam connected: ${videoTracks[0].label}`, 'success');
+                    log(`   Settings: ${JSON.stringify(videoTracks[0].getSettings(), null, 2)}`, 'info');
+                } else {
+                    log('❌ No video tracks found', 'error');
+                }
+                
+                return true;
+            } catch (err) {
+                log(`❌ Webcam error: ${err.message}`, 'error');
+                console.error(err);
+                return false;
+            }
+        }
+        
+        async function testModels() {
+            log('\n🧠 Testing Face-api Models...', 'info');
+            
+            // Check if faceapi is loaded
+            if (typeof faceapi === 'undefined') {
+                log('❌ face-api.js not loaded! Check the script tag.', 'error');
+                return false;
+            }
+            
+            log('✅ face-api.js version: ' + (faceapi.version || 'unknown'), 'success');
+            
+            // Test model loading from different sources
+            const tests = [
+                { name: 'Local folder (./models/tiny_face_detector/)', 
+                  fn: () => faceapi.nets.tinyFaceDetector.loadFromUri('./models/tiny_face_detector') },
+                { name: 'Local folder (./models/face_landmark_68/)', 
+                  fn: () => faceapi.nets.faceLandmark68Net.loadFromUri('./models/face_landmark_68') },
+                { name: 'Direct local (./models/)', 
+                  fn: () => faceapi.nets.tinyFaceDetector.loadFromUri('./models/') },
+                { name: 'CDN (Tiny Face Detector)', 
+                  fn: () => faceapi.nets.tinyFaceDetector.load('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/tiny_face_detector_model-weights_manifest.json') },
+                { name: 'CDN (Face Landmark 68)', 
+                  fn: () => faceapi.nets.faceLandmark68Net.load('https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/face_landmark_68_model-weights_manifest.json') }
+            ];
+            
+            let success = false;
+            
+            for (const test of tests) {
+                try {
+                    log(`   Trying: ${test.name}...`, 'info');
+                    await test.fn();
+                    log(`   ✅ ${test.name} - SUCCESS`, 'success');
+                    success = true;
+                    break; // Stop after first success
+                } catch (err) {
+                    log(`   ❌ ${test.name} - FAILED: ${err.message}`, 'error');
+                }
+            }
+            
+            if (success) {
+                log('✅ Models loaded successfully!', 'success');
+                
+                // Test if models are actually working
+                try {
+                    const options = new faceapi.TinyFaceDetectorOptions();
+                    log('✅ Model options created', 'success');
+                    
+                    // Create a test canvas
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 100;
+                    canvas.height = 100;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(0, 0, 100, 100);
+                    
+                    // Try detection (this should not throw)
+                    await faceapi.detectSingleFace(canvas, options);
+                    log('✅ Detection test passed', 'success');
+                    
+                } catch (err) {
+                    log(`❌ Detection test failed: ${err.message}`, 'error');
+                }
+            } else {
+                log('❌ All model loading methods failed', 'error');
+            }
+            
+            return success;
+        }
+        
+        async function testFileSystem() {
+            log('\n📁 Testing File System...', 'info');
+            
+            // Try to fetch model files to see if they exist
+            const modelPaths = [
+                './models/tiny_face_detector/model.json',
+                './models/tiny_face_detector/tiny_face_detector_model-weights_manifest.json',
+                './models/face_landmark_68/model.json',
+                './models/face_landmark_68/face_landmark_68_model-weights_manifest.json',
+                './models/face_landmark_68_model-weights_manifest.json',
+                './models/tiny_face_detector_model-weights_manifest.json'
+            ];
+            
+            for (const path of modelPaths) {
+                try {
+                    const response = await fetch(path, { method: 'HEAD' });
+                    if (response.ok) {
+                        log(`✅ Found model file: ${path}`, 'success');
+                    } else {
+                        log(`❌ Not found: ${path} (${response.status})`, 'error');
+                    }
+                } catch (err) {
+                    log(`❌ Error checking ${path}: ${err.message}`, 'error');
+                }
+            }
+        }
+        
+        async function runAllTests() {
+            clearOutput();
+            log('🔍 Starting comprehensive tests...\n', 'info');
+            
+            // Test 1: Check browser compatibility
+            log('🌐 Browser: ' + navigator.userAgent, 'info');
+            log('📱 Platform: ' + navigator.platform, 'info');
+            
+            // Test 2: Check if faceapi is available
+            if (typeof faceapi !== 'undefined') {
+                log('✅ face-api.js loaded', 'success');
+            } else {
+                log('❌ face-api.js NOT loaded', 'error');
+            }
+            
+            // Test 3: Check permissions
+            if (navigator.permissions) {
+                try {
+                    const permission = await navigator.permissions.query({ name: 'camera' });
+                    log(`📷 Camera permission: ${permission.state}`, permission.state === 'granted' ? 'success' : 'info');
+                } catch (err) {
+                    log('📷 Cannot query camera permission', 'info');
+                }
+            }
+            
+            // Test 4: Webcam
+            await testWebcam();
+            
+            // Test 5: File system
+            await testFileSystem();
+            
+            // Test 6: Models
+            await testModels();
+            
+            log('\n✅ Tests complete!', 'success');
+        }
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (testStream) {
+                testStream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
 </body>
 </html>
