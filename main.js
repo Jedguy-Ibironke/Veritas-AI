@@ -166,28 +166,28 @@ function stopDetection() {
 // ===============================
 // Risk UI
 // ===============================
-function updateRiskUI(isi, structural, texture, behavioral) {
-  if (!riskBar || !status) return;
-
-  // Risk = 1 - ISI
-  const risk = 1 - isi;
+function updateRiskUI(risk, structural, texture, behavioral) {
   const percentage = (risk * 100).toFixed(0);
 
-  // Bar color coding
-  if (risk < 0.3) riskBar.style.backgroundColor = "green";
-  else if (risk < 0.6) riskBar.style.backgroundColor = "orange";
-  else riskBar.style.backgroundColor = "red";
-
+  // Risk bar width
   riskBar.style.width = `${percentage}%`;
 
-  // Status text
+  // Risk bar color
+  if (risk < 0.3) {
+    riskBar.style.backgroundColor = "green";
+  } else if (risk < 0.6) {
+    riskBar.style.backgroundColor = "orange";
+  } else {
+    riskBar.style.backgroundColor = "red";
+  }
+
+  // Text display
   status.innerText = `
 Structural: ${structural.toFixed(2)}
 Texture: ${texture.toFixed(2)}
 Behavioral: ${behavioral.toFixed(2)}
-ISI: ${isi.toFixed(2)}
-Risk: ${risk.toFixed(2)} (${percentage}%)
-Label: ${getRiskLabel(isi)}
+Final Risk: ${risk.toFixed(2)} (${percentage}%)
+Label: ${getRiskLabel(risk)}
 `;
 }
 
