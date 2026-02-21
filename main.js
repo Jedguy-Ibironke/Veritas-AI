@@ -22,19 +22,63 @@ const modelStatus = document.getElementById("modelStatus");
 
 let currentMode = "live";
 let detectionInterval = null;
+let modelsLoaded = false;
 
 // ---------------------------
-// Load Models
+// Load Models with Fallbacks
 // ---------------------------
 async function loadModels() {
   modelStatus.innerText = "Loading face-api models…";
-
-  await faceapi.nets.tinyFaceDetector.loadFromUri("./models/tiny_face_detector");
-  await faceapi.nets.faceLandmark68Net.loadFromUri("./models/face_landmark_68");
-
-  modelStatus.innerText = "Face-api models loaded ✅";
+  
+  // Try multiple methods to load models
+  const loadMethods = [
+    tryLoadFromLocalFolders,
+    tryLoadFromLocalDirect,
+    tryLoadFromCDN
+  ];
+  
+  for (const method of loadMethods) {
+    try {
+      await method();
+      modelsLoaded = true;
+      modelStatus.innerText = "Face-api models loaded ✅";
+      return;
+    } catch (error) {
+      console.warn(`Model loading method failed:`, error);
+      // Continue to next method
+    }
+  }
+  
+  // If all methods fail
+  modelStatus.innerText = "❌ Failed to load models. Check console.";
 }
 
+async function tryLoadFromLocalFolders() {
+  // Method 1: Try loading from expected folder structure
+  await faceapi.nets.tinyFaceDetector.loadFromUri("./models/tiny_face_detector");
+  await faceapi.nets.faceLandmark68Net.loadFromUri("./models/face_landmark_68");
+}
+
+async function tryLoadFromLocalDirect() {
+  // Method 2: Try loading directly from models folder
+  await faceapi.nets.tinyFaceDetector.loadFromUri("./models/");
+  await faceapi.nets.faceLandmark68Net.loadFromUri("./models/");
+}
+
+async function tryLoadFromCDN() {
+  // Method 3: Load from CDN as fallback
+  modelStatus.innerText = "Loading from CDN...";
+  
+  await faceapi.nets.tinyFaceDetector.load(
+    'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/tiny_face_detector_model-weights_manifest.json'
+  );
+  
+  await faceapi.nets.faceLandmark68Net.load(
+    'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/face_landmark_68_model-weights_manifest.json'
+  );
+}
+
+// Start loading models
 loadModels();
 
 // ---------------------------
@@ -67,7 +111,20 @@ async function startWebcam() {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     video.srcObject = stream;
     video.play();
-    startDetection(video);
+    
+    // Wait for models to load before starting detection
+    if (modelsLoaded) {
+      startDetection(video);
+    } else {
+      // Check again after 1 second
+      setTimeout(() => {
+        if (modelsLoaded) {
+          startDetection(video);
+        } else {
+          status.innerText = "Waiting for models to load...";
+        }
+      }, 1000);
+    }
   } catch (err) {
     modelStatus.innerText = "❌ Could not access webcam";
     console.error(err);
@@ -87,7 +144,13 @@ function handleFileUpload(event) {
   if (currentMode === "image") {
     imagePreview.src = url;
     imagePreview.style.display = "block";
-    imagePreview.onload = () => startDetection(imagePreview);
+    imagePreview.onload = () => {
+      if (modelsLoaded) {
+        startDetection(imagePreview);
+      } else {
+        status.innerText = "Waiting for models to load...";
+      }
+    };
   }
 
   if (currentMode === "video") {
@@ -95,7 +158,11 @@ function handleFileUpload(event) {
     video.style.display = "block";
     video.onloadedmetadata = () => {
       video.play();
-      startDetection(video);
+      if (modelsLoaded) {
+        startDetection(video);
+      } else {
+        status.innerText = "Waiting for models to load...";
+      }
     };
   }
 }
@@ -104,6 +171,11 @@ function handleFileUpload(event) {
 // Detection Loop
 // ---------------------------
 function startDetection(element) {
+  if (!modelsLoaded) {
+    status.innerText = "Models not loaded yet";
+    return;
+  }
+  
   stopDetection();
 
   detectionInterval = setInterval(async () => {
@@ -149,6 +221,7 @@ Label: ${label}
 `;
     } catch (err) {
       console.error("Detection error:", err);
+      status.innerText = "Error during detection";
     }
   }, 300);
 }
@@ -164,3 +237,10 @@ function stopDetection() {
 // Initialize Default Mode
 // ---------------------------
 handleModeChange();
+
+//  a retry mechanism for model loading
+setInterval(() => {
+  if (!modelsLoaded && !modelStatus.innerText.includes("Failed")) {
+    loadModels();
+  }
+}, 5000); // Retry every 5 seconds if models aren't loaded
