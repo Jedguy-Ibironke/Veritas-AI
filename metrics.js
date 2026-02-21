@@ -11,8 +11,7 @@ export function resetBehavioralState() {
 }
 
 // ===============================
-// STRUCTURAL SCORE (FIXED VERSION)
-// Now normalized relative to face width
+// STRUCTURAL SCORE (CENTERED SYMMETRY VERSION)
 // ===============================
 export function computeStructuralScore(landmarks) {
   if (!landmarks || !landmarks.positions) return 0;
@@ -20,21 +19,29 @@ export function computeStructuralScore(landmarks) {
   const points = landmarks.positions;
   if (points.length < 68) return 0;
 
-  // Estimate face width using jaw endpoints
+  // Face width from jaw endpoints
   const leftJaw = points[0];
   const rightJaw = points[16];
-
   const faceWidth = Math.abs(rightJaw.x - leftJaw.x);
-  if (!faceWidth || faceWidth === 0) return 0;
+  if (!faceWidth) return 0;
+
+  // Compute vertical centerline of face
+  const centerX = (leftJaw.x + rightJaw.x) / 2;
 
   let asymmetry = 0;
   let count = 0;
 
-  for (let i = 0; i < 17; i++) {
+  // Compare mirrored jaw points (skip extreme edges)
+  for (let i = 1; i < 8; i++) {
     const left = points[i];
     const right = points[16 - i];
 
-    asymmetry += Math.abs(left.x - right.x);
+    // Mirror right side across centerline
+    const mirroredRightX = 2 * centerX - right.x;
+
+    asymmetry += Math.abs(left.x - mirroredRightX);
+    asymmetry += Math.abs(left.y - right.y);
+
     count++;
   }
 
@@ -42,10 +49,11 @@ export function computeStructuralScore(landmarks) {
 
   const avgAsymmetry = asymmetry / count;
 
-  // Normalize relative to face width (resolution independent)
+  // Normalize relative to face width
   const normalized = avgAsymmetry / faceWidth;
 
-  return Math.min(Math.max(normalized, 0), 1);
+  // Slight sensitivity boost (tuneable)
+  return Math.min(Math.max(normalized * 2, 0), 1);
 }
 
 // ===============================
