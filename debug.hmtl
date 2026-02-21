@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Index</title>
+</head>
+<body>
+    <h2>Debugging main.js Loading</h2>
+    
+    <div id="output"></div>
+    
+    <!-- Load face-api -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    
+    <!-- Try different ways to load main.js -->
+    <script>
+        const output = document.getElementById('output');
+        
+        async function checkFiles() {
+            let html = '';
+            
+            // Check if main.js exists and is accessible
+            try {
+                const response = await fetch('./main.js');
+                if (response.ok) {
+                    const text = await response.text();
+                    html += '✅ main.js found! Length: ' + text.length + ' characters<br>';
+                    html += 'First 100 chars: ' + text.substring(0, 100) + '...<br>';
+                } else {
+                    html += '❌ main.js not found! Status: ' + response.status + '<br>';
+                }
+            } catch (err) {
+                html += '❌ Error fetching main.js: ' + err.message + '<br>';
+            }
+            
+            // Check if the imports in main.js exist
+            const files = ['landmarks.js', 'metrics.js', 'scoring.js'];
+            for (const file of files) {
+                try {
+                    const response = await fetch('./' + file);
+                    if (response.ok) {
+                        html += '✅ ' + file + ' found<br>';
+                    } else {
+                        html += '❌ ' + file + ' not found<br>';
+                    }
+                } catch (err) {
+                    html += '❌ Error fetching ' + file + ': ' + err.message + '<br>';
+                }
+            }
+            
+            output.innerHTML = html;
+        }
+        
+        checkFiles();
+    </script>
+    
+    <!-- Try loading main.js directly -->
+    <script src="./main.js"></script>
+    
+    <script>
+        // Check if main.js loaded
+        setTimeout(() => {
+            if (typeof computeISI !== 'undefined') {
+                output.innerHTML += '<br>✅ main.js loaded successfully! computeISI found.<br>';
+            } else {
+                output.innerHTML += '<br>❌ main.js did not load. computeISI not found.<br>';
+                
+                // Try to see if there's a JavaScript error
+                output.innerHTML += '<br>Checking for errors...<br>';
+            }
+        }, 500);
+    </script>
+</body>
+</html>
