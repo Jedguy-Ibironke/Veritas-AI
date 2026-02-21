@@ -25,7 +25,6 @@ fileInput.addEventListener("change", handleFileUpload);
 
 function handleModeChange() {
   currentMode = modeSelect.value;
-
   stopDetection();
 
   if (currentMode === "live") {
@@ -64,7 +63,6 @@ function handleFileUpload(event) {
   if (!file) return;
 
   const url = URL.createObjectURL(file);
-
   stopDetection();
 
   if (currentMode === "image") {
@@ -82,87 +80,3 @@ function handleFileUpload(event) {
 
     video.onloadedmetadata = () => {
       video.play();
-      startDetection(video);
-    };
-  }
-}
-
-// ===============================
-// Detection Loop
-// ===============================
-function startDetection(element) {
-  stopDetection();
-
-  detectionInterval = setInterval(async () => {
-    try {
-      const landmarks = await detectLandmarks(element);
-      if (!landmarks) return;
-
-      const structural = computeStructuralScore(landmarks);
-
-      const texture =
-        currentMode === "image"
-          ? computeTextureScore(element)
-          : computeTextureScore(element);
-
-      const behavioral =
-        currentMode === "live" || currentMode === "video"
-          ? computeBehavioralScore(landmarks)
-          : 0;
-
-      const risk = computeFinalRisk({
-        structural,
-        texture,
-        behavioral,
-        source: currentMode
-      });
-
-      updateRiskUI(risk, structural, texture, behavioral);
-
-    } catch (err) {
-      console.error("Detection error:", err);
-    }
-  }, 300);
-}
-
-function stopDetection() {
-  if (detectionInterval) {
-    clearInterval(detectionInterval);
-    detectionInterval = null;
-  }
-}
-
-// ===============================
-// Risk UI
-// ===============================
-function updateRiskUI(risk, structural, texture, behavioral) {
-  if (!riskBar || !status) return;
-
-  const percentage = (risk * 100).toFixed(0);
-
-  // Update width
-  riskBar.style.width = `${percentage}%`;
-
-  // Color coding
-  if (risk < 0.3) {
-    riskBar.style.backgroundColor = "green";
-  } else if (risk < 0.6) {
-    riskBar.style.backgroundColor = "orange";
-  } else {
-    riskBar.style.backgroundColor = "red";
-  }
-
-  // Status text
-  status.innerText = `
-Structural: ${structural.toFixed(2)}
-Texture: ${texture.toFixed(2)}
-Behavioral: ${behavioral.toFixed(2)}
-Final Risk: ${risk.toFixed(2)} (${percentage}%)
-Label: ${getRiskLabel(risk)}
-`;
-}
-
-// ===============================
-// Initialize Default Mode
-// ===============================
-handleModeChange();
