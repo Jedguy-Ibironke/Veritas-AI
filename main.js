@@ -21,23 +21,17 @@ let currentMode = "live";
 let detectionInterval = null;
 let modelsLoaded = false;
 
-// Load models from CDN (same as working test)
+// Load models from the correct path (as confirmed by the test)
 async function loadModels() {
-  modelStatus.innerText = "Loading models from CDN...";
+  modelStatus.innerText = "Loading models...";
   
   try {
-    // Load Tiny Face Detector from CDN
-    await faceapi.nets.tinyFaceDetector.load(
-      'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/tiny_face_detector_model-weights_manifest.json'
-    );
-    
-    // Load Face Landmark Model from CDN
-    await faceapi.nets.faceLandmark68Net.load(
-      'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights/face_landmark_68_model-weights_manifest.json'
-    );
+    // Use the direct path that worked in the test
+    await faceapi.nets.tinyFaceDetector.loadFromUri("./models/");
+    await faceapi.nets.faceLandmark68Net.loadFromUri("./models/");
     
     modelsLoaded = true;
-    modelStatus.innerText = "✅ Models loaded from CDN";
+    modelStatus.innerText = "✅ Models loaded!";
     status.innerText = "Ready - Select an option";
     
     // Start webcam if in live mode
@@ -69,6 +63,8 @@ function handleModeChange() {
     video.style.display = "block";
     if (modelsLoaded) {
       startWebcam();
+    } else {
+      status.innerText = "Loading models...";
     }
   } else {
     fileInput.style.display = "inline";
