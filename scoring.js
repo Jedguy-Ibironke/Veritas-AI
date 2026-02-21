@@ -16,27 +16,21 @@ function smooth(value) {
   return sum / isiHistory.length;
 }
 
-export function computeISI({
-  structural,
-  behavioral,
-  texture,
-  lipMismatch
-}) {
-  // Convert instability → stability
+// -----------------------------
+// Compute ISI (multi-modal fusion)
+// -----------------------------
+export function computeISI({ structural, behavioral, texture }) {
   const temporalStability = 1 - behavioral;
-  const audioVisualConsistency = 1 - lipMismatch;
   const textureRealism = 1 - texture;
 
-  // Multiplicative fusion (stronger than weighted sum)
-  const rawISI =
-    structural *
-    temporalStability *
-    textureRealism *
-    audioVisualConsistency;
+  const rawISI = structural * temporalStability * textureRealism;
 
   return smooth(rawISI);
 }
 
+// -----------------------------
+// Explainable Labels
+// -----------------------------
 export function getRiskLabel(isi) {
   if (isi > 0.75) return "🟢 Stable Identity (Likely Human)";
   if (isi > 0.45) return "🟡 Moderate Stability";
