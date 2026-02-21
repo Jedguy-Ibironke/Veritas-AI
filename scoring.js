@@ -1,15 +1,44 @@
-export function computeRisk(instability, lipMismatch) {
-  const score =
-    0.6 * instability +
-    0.4 * lipMismatch;
+// ===============================
+// scoring.js
+// Identity Stability Index (ISI)
+// ===============================
 
-  return Math.min(score, 1);
+const windowSize = 10;
+let isiHistory = [];
+
+function smooth(value) {
+  isiHistory.push(value);
+  if (isiHistory.length > windowSize) {
+    isiHistory.shift();
+  }
+
+  const sum = isiHistory.reduce((a, b) => a + b, 0);
+  return sum / isiHistory.length;
 }
 
-export function computeRisk(instability, lipMismatch) {
-  const score =
-    0.6 * instability +
-    0.4 * lipMismatch;
+export function computeISI({
+  structural,
+  behavioral,
+  texture,
+  lipMismatch
+}) {
+  // Convert instability → stability
+  const temporalStability = 1 - behavioral;
+  const audioVisualConsistency = 1 - lipMismatch;
+  const textureRealism = 1 - texture;
 
-  return Math.min(score, 1);
+  // Multiplicative fusion (stronger than weighted sum)
+  const rawISI =
+    structural *
+    temporalStability *
+    textureRealism *
+    audioVisualConsistency;
+
+  return smooth(rawISI);
+}
+
+export function getRiskLabel(isi) {
+  if (isi > 0.75) return "🟢 Stable Identity (Likely Human)";
+  if (isi > 0.45) return "🟡 Moderate Stability";
+  return "🔴 Unstable Identity (Likely Synthetic)";
 }
