@@ -1,3 +1,8 @@
+// ===============================
+// main.js
+// Real-time Multi-Layer Identity Stability Detection
+// ===============================
+
 import { detectLandmarks } from "./landmarks.js";
 import {
   computeBehavioralScore,
@@ -9,25 +14,19 @@ import {
 
 import { computeISI, getRiskLabel } from "./scoring.js";
 
-const landmarks = detection.landmarks.positions;
-const faceBox = detection.detection.box;
+// -----------------------------
+// DOM Elements
+// -----------------------------
+const video = document.getElementById("video");
+const imagePreview = document.getElementById("imagePreview");
+const fileInput = document.getElementById("fileInput");
+const modeSelect = document.getElementById("modeSelect");
+const riskBar = document.getElementById("riskBar");
+const status = document.getElementById("status");
 
-const behavioral = computeBehavioralScore(landmarks);
-const structural = computeStructuralScore(landmarks);
-
-const faceTexture = computeFaceTexture(video, faceBox);
-const frameTexture = computeFrameTexture(video);
-
-const texture = computeTextureScore(faceTexture, frameTexture);
-
-const isi = computeISI({
-  structural,
-  behavioral,
-  texture
-});
-
-const label = getRiskLabel(isi);
-
+// -----------------------------
+// State
+// -----------------------------
 let currentMode = "live";
 let detectionInterval = null;
 
@@ -47,7 +46,11 @@ function handleModeChange() {
     imagePreview.style.display = "none";
     video.style.display = "block";
     startWebcam();
-  } else {
+  } else if (currentMode === "image") {
+    fileInput.style.display = "inline";
+    video.style.display = "none";
+    imagePreview.style.display = "none";
+  } else if (currentMode === "video") {
     fileInput.style.display = "inline";
     video.style.display = "none";
     imagePreview.style.display = "none";
@@ -58,10 +61,7 @@ function handleModeChange() {
 // Webcam
 // ===============================
 async function startWebcam() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: true
-  });
-
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
   video.srcObject = stream;
 
   video.onloadedmetadata = () => {
@@ -88,9 +88,7 @@ function handleFileUpload(event) {
     imagePreview.onload = () => {
       startDetection(imagePreview);
     };
-  }
-
-  if (currentMode === "video") {
+  } else if (currentMode === "video") {
     video.src = url;
     video.style.display = "block";
 
@@ -109,36 +107,55 @@ function startDetection(element) {
 
   detectionInterval = setInterval(async () => {
     try {
-      const landmarks = await detectLandmarks(element);
-      if (!landmarks) return;
+      const detection = await detectLandmarks(element);
+      if (!detection) return;
 
+      const landmarks = detection.landmarks.positions;
+      const faceBox = detection.detection.box;
+
+      // ----------------------------
+      // STRUCTURAL
+      // ----------------------------
       const structural = computeStructuralScore(landmarks);
 
-      const texture =
-        currentMode === "image"
-          ? computeTextureScore(element)
-          : computeTextureScore(element);
-
+      // ----------------------------
+      // BEHAVIORAL (only for live/video)
+      // ----------------------------
       const behavioral =
         currentMode === "live" || currentMode === "video"
           ? computeBehavioralScore(landmarks)
           : 0;
 
-      const risk = computeFinalRisk({
+      // ----------------------------
+      // TEXTURE (dual-region)
+      // ----------------------------
+      const faceTexture = computeFaceTexture(element, faceBox);
+      const frameTexture = computeFrameTexture(element);
+      const texture = computeTextureScore(faceTexture, frameTexture);
+
+      // ----------------------------
+      // FINAL IDENTITY STABILITY INDEX
+      // ----------------------------
+      const isi = computeISI({
         structural,
-        texture,
         behavioral,
-        source: currentMode
+        texture
       });
 
-      updateRiskUI(risk, structural, texture, behavioral);
+      // ----------------------------
+      // UPDATE UI
+      // ----------------------------
+      updateRiskUI(isi, structural, texture, behavioral);
 
     } catch (err) {
       console.error("Detection error:", err);
     }
-  }, 300);
+  }, 300); // every 300ms
 }
 
+// ===============================
+// Stop Detection
+// ===============================
 function stopDetection() {
   if (detectionInterval) {
     clearInterval(detectionInterval);
@@ -149,30 +166,28 @@ function stopDetection() {
 // ===============================
 // Risk UI
 // ===============================
-function updateRiskUI(risk, structural, texture, behavioral) {
+function updateRiskUI(isi, structural, texture, behavioral) {
   if (!riskBar || !status) return;
 
+  // Risk = 1 - ISI
+  const risk = 1 - isi;
   const percentage = (risk * 100).toFixed(0);
 
-  // Update width
-  riskBar.style.width = `${percentage}%`;
+  // Bar color coding
+  if (risk < 0.3) riskBar.style.backgroundColor = "green";
+  else if (risk < 0.6) riskBar.style.backgroundColor = "orange";
+  else riskBar.style.backgroundColor = "red";
 
-  // Color coding
-  if (risk < 0.3) {
-    riskBar.style.backgroundColor = "green";
-  } else if (risk < 0.6) {
-    riskBar.style.backgroundColor = "orange";
-  } else {
-    riskBar.style.backgroundColor = "red";
-  }
+  riskBar.style.width = `${percentage}%`;
 
   // Status text
   status.innerText = `
 Structural: ${structural.toFixed(2)}
 Texture: ${texture.toFixed(2)}
 Behavioral: ${behavioral.toFixed(2)}
-Final Risk: ${risk.toFixed(2)} (${percentage}%)
-Label: ${getRiskLabel(risk)}
+ISI: ${isi.toFixed(2)}
+Risk: ${risk.toFixed(2)} (${percentage}%)
+Label: ${getRiskLabel(isi)}
 `;
 }
 
