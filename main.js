@@ -103,7 +103,12 @@ function handleFileUpload(event) {
 // LIVE + IMAGE LOOP
 // ===============================
 function startDetection(element) {
-  stopDetection();
+
+  // 🔥 FIX: Only clear interval, DO NOT stop webcam stream
+  if (detectionInterval) {
+    clearInterval(detectionInterval);
+    detectionInterval = null;
+  }
 
   detectionInterval = setInterval(async () => {
     try {
