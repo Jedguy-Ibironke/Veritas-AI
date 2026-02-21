@@ -1,136 +1,164 @@
 // ===============================
-// metrics.js
-// Multi-layer Synthetic Detection
+// STRUCTURAL SCORE
+// Based on facial landmark symmetry
 // ===============================
+export function computeStructuralScore(landmarks) {
+  if (!landmarks || !landmarks.positions) return 0;
 
-// -----------------------------
-// Utility: Euclidean distance
-// -----------------------------
-function distance(p1, p2) {
-  const dx = p2._x - p1._x;
-  const dy = p2._y - p1._y;
-  return Math.sqrt(dx * dx + dy * dy);
+  const points = landmarks.positions;
+  if (points.length < 68) return 0;
+
+  // Simple left/right symmetry check
+  let asymmetry = 0;
+  let count = 0;
+
+  for (let i = 0; i < 17; i++) {
+    const left = points[i];
+    const right = points[16 - i];
+
+    asymmetry += Math.abs(left.x - right.x);
+    count++;
+  }
+
+  if (count === 0) return 0;
+
+  const avgAsymmetry = asymmetry / count;
+
+  // Normalize (tweak divisor if needed)
+  return Math.min(avgAsymmetry / 50, 1);
 }
 
-// -----------------------------
-// Behavioral Instability
-// -----------------------------
-let previousNose = null;
+// ===============================
+// TEXTURE SCORE
+// Detects unnatural smoothness
+// ===============================
+export function computeTextureScore(mediaElement) {
 
-export function computeBehavioralScore(landmarks) {
-  if (!landmarks) return 0;
+  // Determine correct dimensions
+  const width = mediaElement.videoWidth || mediaElement.naturalWidth || mediaElement.width;
+  const height = mediaElement.videoHeight || mediaElement.naturalHeight || mediaElement.height;
 
-  const nose = landmarks[30];
-
-  if (!previousNose) {
-    previousNose = nose;
+  // 🔥 Safety guard (prevents DOMException)
+  if (!width || !height || width <= 0 || height <= 0) {
     return 0;
   }
 
-  const movement = distance(nose, previousNose);
-  previousNose = nose;
+  // Downscale for performance (important for video)
+  const SAMPLE_SIZE = 160;
 
-  // Normalize (15px typical movement max)
-  return Math.min(movement / 15, 1);
-}
-
-// -----------------------------
-// Structural Score
-// -----------------------------
-export function computeStructuralScore(landmarks) {
-  if (!landmarks) return 0;
-
-  const leftEye = landmarks[36];
-  const rightEye = landmarks[45];
-  const nose = landmarks[30];
-  const jawLeft = landmarks[0];
-  const jawRight = landmarks[16];
-
-  // Symmetry
-  const leftDist = Math.abs(leftEye._x - nose._x);
-  const rightDist = Math.abs(rightEye._x - nose._x);
-  const symmetryDiff = Math.abs(leftDist - rightDist);
-
-  const symmetryScore = 1 - Math.min(symmetryDiff / 20, 1);
-
-  // Eye ratio
-  const eyeDistance = Math.abs(rightEye._x - leftEye._x);
-  const faceWidth = Math.abs(jawRight._x - jawLeft._x);
-  const ratio = eyeDistance / faceWidth;
-
-  const idealRatio = 0.45;
-  const ratioDiff = Math.abs(ratio - idealRatio);
-  const ratioScore = 1 - Math.min(ratioDiff / 0.15, 1);
-
-  return (symmetryScore + ratioScore) / 2;
-}
-
-// -----------------------------
-// Texture Score (Over-smoothing)
-// -----------------------------
-export function computeTextureScore(imageElement) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
 
-  canvas.width = imageElement.width;
-  canvas.height = imageElement.height;
+  canvas.width = SAMPLE_SIZE;
+  canvas.height = SAMPLE_SIZE;
 
-  ctx.drawImage(imageElement, 0, 0);
+  try {
+    ctx.drawImage(mediaElement, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
+  } catch (err) {
+    return 0;
+  }
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let imageData;
+  try {
+    imageData = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
+  } catch (err) {
+    return 0;
+  }
 
   let mean = 0;
   let variance = 0;
-  const totalPixels = data.length / 4;
+  const totalPixels = imageData.length / 4;
 
-  // Compute mean grayscale
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+  if (totalPixels === 0) return 0;
+
+  // Compute grayscale mean
+  for (let i = 0; i < imageData.length; i += 4) {
+    const gray = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3;
     mean += gray;
   }
 
   mean /= totalPixels;
 
   // Compute variance
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+  for (let i = 0; i < imageData.length; i += 4) {
+    const gray = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3;
     variance += Math.pow(gray - mean, 2);
   }
 
   variance /= totalPixels;
 
-  // AI images often overly smooth → low variance
+  // Lower variance = smoother (more AI-like)
   const normalized = 1 - Math.min(variance / 2000, 1);
 
   return normalized;
 }
 
-// -----------------------------
-// Final Risk Combiner
-// -----------------------------
-export function computeFinalRisk({
-  structural,
-  texture,
-  behavioral,
-  source
-}) {
-  let score;
+// ===============================
+// BEHAVIORAL SCORE
+// Detects unnatural landmark motion
+// ===============================
+let previousLandmarks = null;
 
-  if (source === "image") {
-    score = 0.6 * structural + 0.4 * texture;
-  } else {
-    // live or video
-    score = 0.4 * structural + 0.4 * behavioral + 0.2 * texture;
+export function computeBehavioralScore(landmarks) {
+  if (!landmarks || !landmarks.positions) return 0;
+
+  if (!previousLandmarks) {
+    previousLandmarks = landmarks.positions;
+    return 0;
   }
 
-  return Math.min(Math.max(score, 0), 1);
+  const current = landmarks.positions;
+  const prev = previousLandmarks;
+
+  if (current.length !== prev.length) {
+    previousLandmarks = current;
+    return 0;
+  }
+
+  let movement = 0;
+
+  for (let i = 0; i < current.length; i++) {
+    movement += Math.abs(current[i].x - prev[i].x);
+    movement += Math.abs(current[i].y - prev[i].y);
+  }
+
+  previousLandmarks = current;
+
+  const avgMovement = movement / current.length;
+
+  return Math.min(avgMovement / 20, 1);
 }
 
-// -----------------------------
-// Risk Label
-// -----------------------------
-export function getRiskLabel(score) {
-  if (score < 0.3) return "Likely Human";
-  if (score < 0.6) return "Possibly Synthetic";
-  return "Likely AI Generated";
+// ===============================
+// FINAL RISK SCORE
+// Weighted combination
+// ===============================
+export function computeFinalRisk({
+  structural = 0,
+  texture = 0,
+  behavioral = 0,
+  source = "live"
+}) {
+
+  let risk = 0;
+
+  if (source === "image") {
+    risk = 0.6 * structural + 0.4 * texture;
+  } else if (source === "video") {
+    risk = 0.4 * structural + 0.3 * texture + 0.3 * behavioral;
+  } else {
+    // live
+    risk = 0.5 * structural + 0.5 * behavioral;
+  }
+
+  return Math.min(Math.max(risk, 0), 1);
+}
+
+// ===============================
+// RISK LABEL
+// ===============================
+export function getRiskLabel(risk) {
+  if (risk < 0.3) return "Likely Real";
+  if (risk < 0.6) return "Uncertain";
+  return "Likely AI-Generated";
 }
