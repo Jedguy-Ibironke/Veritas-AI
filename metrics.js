@@ -1,89 +1,105 @@
 // ===============================
 // metrics.js
-// Multi-layer Synthetic Detection
+// Identity Stability Index (ISI)
 // ===============================
 
 // -----------------------------
 // Utility: Euclidean distance
 // -----------------------------
 function distance(p1, p2) {
-  const dx = p2._x - p1._x;
-  const dy = p2._y - p1._y;
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-// -----------------------------
-// Behavioral Instability
-// -----------------------------
-let previousNose = null;
+// ==============================
+// BEHAVIORAL (Temporal Jitter)
+// ==============================
+
+let previousLandmarks = null;
 
 export function computeBehavioralScore(landmarks) {
   if (!landmarks) return 0;
 
-  const nose = landmarks[30];
-
-  if (!previousNose) {
-    previousNose = nose;
+  if (!previousLandmarks) {
+    previousLandmarks = landmarks;
     return 0;
   }
 
-  const movement = distance(nose, previousNose);
-  previousNose = nose;
+  let totalMovement = 0;
 
-  // Normalize (15px typical movement max)
-  return Math.min(movement / 15, 1);
+  for (let i = 0; i < landmarks.length; i++) {
+    totalMovement += distance(landmarks[i], previousLandmarks[i]);
+  }
+
+  previousLandmarks = landmarks;
+
+  const avgMovement = totalMovement / landmarks.length;
+
+  // Normalize (10px typical upper jitter bound)
+  return Math.min(avgMovement / 10, 1);
 }
 
-// -----------------------------
-// Structural Score
-// -----------------------------
+// ==============================
+// STRUCTURAL (Temporal Consistency)
+// ==============================
+
+let previousRatio = null;
+
 export function computeStructuralScore(landmarks) {
-  if (!landmarks) return 0;
+  if (!landmarks) return 1;
 
   const leftEye = landmarks[36];
   const rightEye = landmarks[45];
-  const nose = landmarks[30];
   const jawLeft = landmarks[0];
   const jawRight = landmarks[16];
 
-  // Symmetry
-  const leftDist = Math.abs(leftEye._x - nose._x);
-  const rightDist = Math.abs(rightEye._x - nose._x);
-  const symmetryDiff = Math.abs(leftDist - rightDist);
+  const eyeDistance = Math.abs(rightEye.x - leftEye.x);
+  const faceWidth = Math.abs(jawRight.x - jawLeft.x);
 
-  const symmetryScore = 1 - Math.min(symmetryDiff / 20, 1);
-
-  // Eye ratio
-  const eyeDistance = Math.abs(rightEye._x - leftEye._x);
-  const faceWidth = Math.abs(jawRight._x - jawLeft._x);
   const ratio = eyeDistance / faceWidth;
 
-  const idealRatio = 0.45;
-  const ratioDiff = Math.abs(ratio - idealRatio);
-  const ratioScore = 1 - Math.min(ratioDiff / 0.15, 1);
+  if (!previousRatio) {
+    previousRatio = ratio;
+    return 1;
+  }
 
-  return (symmetryScore + ratioScore) / 2;
+  const diff = Math.abs(ratio - previousRatio);
+  previousRatio = ratio;
+
+  // If structure fluctuates → suspicious
+  const instability = Math.min(diff / 0.05, 1);
+
+  return 1 - instability;
 }
 
-// -----------------------------
-// Texture Score (Over-smoothing)
-// -----------------------------
-export function computeTextureScore(imageElement) {
+// ==============================
+// TEXTURE (Face-Only Variance)
+// ==============================
+
+export function computeTextureScore(videoElement, faceBox) {
+  if (!faceBox) return 0;
+
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
 
-  canvas.width = imageElement.width;
-  canvas.height = imageElement.height;
+  const { x, y, width, height } = faceBox;
 
-  ctx.drawImage(imageElement, 0, 0);
+  canvas.width = width;
+  canvas.height = height;
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  ctx.drawImage(
+    videoElement,
+    x, y, width, height,
+    0, 0, width, height
+  );
+
+  const data = ctx.getImageData(0, 0, width, height).data;
 
   let mean = 0;
   let variance = 0;
   const totalPixels = data.length / 4;
 
-  // Compute mean grayscale
   for (let i = 0; i < data.length; i += 4) {
     const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
     mean += gray;
@@ -91,7 +107,6 @@ export function computeTextureScore(imageElement) {
 
   mean /= totalPixels;
 
-  // Compute variance
   for (let i = 0; i < data.length; i += 4) {
     const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
     variance += Math.pow(gray - mean, 2);
@@ -99,38 +114,56 @@ export function computeTextureScore(imageElement) {
 
   variance /= totalPixels;
 
-  // AI images often overly smooth → low variance
-  const normalized = 1 - Math.min(variance / 2000, 1);
+  // AI faces often overly smooth → low variance
+  const smoothness = 1 - Math.min(variance / 2500, 1);
 
-  return normalized;
+  return smoothness;
 }
 
-// -----------------------------
-// Final Risk Combiner
-// -----------------------------
-export function computeFinalRisk({
-  structural,
-  texture,
-  behavioral,
-  source
-}) {
-  let score;
+// ==============================
+// SLIDING WINDOW SMOOTHING
+// ==============================
 
-  if (source === "image") {
-    score = 0.6 * structural + 0.4 * texture;
-  } else {
-    // live or video
-    score = 0.4 * structural + 0.4 * behavioral + 0.2 * texture;
+const windowSize = 10;
+let isiWindow = [];
+
+function smoothISI(currentISI) {
+  isiWindow.push(currentISI);
+  if (isiWindow.length > windowSize) {
+    isiWindow.shift();
   }
 
-  return Math.min(Math.max(score, 0), 1);
+  const sum = isiWindow.reduce((a, b) => a + b, 0);
+  return sum / isiWindow.length;
 }
 
-// -----------------------------
-// Risk Label
-// -----------------------------
-export function getRiskLabel(score) {
-  if (score < 0.3) return "Likely Human";
-  if (score < 0.6) return "Possibly Synthetic";
-  return "Likely AI Generated";
+// ==============================
+// FINAL IDENTITY STABILITY INDEX
+// ==============================
+
+export function computeISI({
+  structural,
+  behavioral,
+  texture
+}) {
+  // Convert instability → stability
+  const temporalStability = 1 - behavioral;
+  const textureRealism = 1 - texture;
+
+  const rawISI =
+    structural *
+    temporalStability *
+    textureRealism;
+
+  return smoothISI(rawISI);
+}
+
+// ==============================
+//  LABEL
+// ==============================
+
+export function getRiskLabel(isi) {
+  if (isi > 0.75) return "🟢 Stable Identity (Likely Human)";
+  if (isi > 0.45) return "🟡 Moderate Stability";
+  return "🔴 Unstable Identity (Likely Synthetic)";
 }
