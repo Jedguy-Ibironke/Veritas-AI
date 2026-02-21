@@ -4,7 +4,8 @@ import {
   computeTextureScore,
   computeBehavioralScore,
   computeFinalRisk,
-  getRiskLabel
+  getRiskLabel,
+  resetBehavioralState
 } from "./metrics.js";
 
 const video = document.getElementById("video");
@@ -20,9 +21,10 @@ const loaderText = document.getElementById("loaderText");
 
 let currentMode = "live";
 let detectionInterval = null;
+let currentStream = null;
 
 // ===============================
-// Mode Switching
+// MODE SWITCH
 // ===============================
 modeSelect.addEventListener("change", handleModeChange);
 fileInput.addEventListener("change", handleFileUpload);
@@ -31,46 +33,52 @@ function handleModeChange() {
   currentMode = modeSelect.value;
 
   stopDetection();
+  resetBehavioralState();
+
+  videoLoader.style.display = "none";
+  imagePreview.style.display = "none";
 
   if (currentMode === "live") {
     fileInput.style.display = "none";
-    imagePreview.style.display = "none";
     video.style.display = "block";
-    videoLoader.style.display = "none";
     startWebcam();
   } else {
     fileInput.style.display = "inline";
     video.style.display = "none";
-    imagePreview.style.display = "none";
-    videoLoader.style.display = "none";
   }
 }
 
 // ===============================
-// Webcam
+// WEBCAM
 // ===============================
 async function startWebcam() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: true
-  });
+  try {
+    currentStream = await navigator.mediaDevices.getUserMedia({
+      video: true
+    });
 
-  video.srcObject = stream;
+    video.srcObject = currentStream;
 
-  video.onloadedmetadata = () => {
-    video.play();
-    startDetection(video);
-  };
+    video.onloadedmetadata = () => {
+      video.play();
+      startDetection(video);
+    };
+  } catch (err) {
+    console.error("Webcam error:", err);
+  }
 }
 
 // ===============================
-// File Upload
+// FILE UPLOAD
 // ===============================
 function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   const url = URL.createObjectURL(file);
+
   stopDetection();
+  resetBehavioralState();
 
   if (currentMode === "image") {
     imagePreview.src = url;
@@ -92,7 +100,7 @@ function handleFileUpload(event) {
 }
 
 // ===============================
-// Live / Image Detection Loop
+// LIVE + IMAGE LOOP
 // ===============================
 function startDetection(element) {
   stopDetection();
@@ -105,7 +113,9 @@ function startDetection(element) {
       const structural = computeStructuralScore(landmarks);
       const texture = computeTextureScore(element);
       const behavioral =
-        currentMode === "live" ? computeBehavioralScore(landmarks) : 0;
+        currentMode === "live"
+          ? computeBehavioralScore(landmarks)
+          : 0;
 
       const risk = computeFinalRisk({
         structural,
@@ -121,15 +131,23 @@ function startDetection(element) {
   }, 300);
 }
 
+// ===============================
+// STOP EVERYTHING CLEANLY
+// ===============================
 function stopDetection() {
   if (detectionInterval) {
     clearInterval(detectionInterval);
     detectionInterval = null;
   }
+
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
+  }
 }
 
 // ===============================
-// VIDEO PROCESSING LOADER
+// VIDEO PROCESSING
 // ===============================
 async function processUploadedVideo(videoElement) {
   videoLoader.style.display = "block";
@@ -144,14 +162,11 @@ async function processUploadedVideo(videoElement) {
   videoElement.currentTime = 0;
 
   return new Promise((resolve) => {
-
     videoElement.addEventListener("seeked", async function processFrame() {
 
       if (videoElement.currentTime >= duration) {
-
-        const finalRisk = frameCount > 0
-          ? accumulatedRisk / frameCount
-          : 0;
+        const finalRisk =
+          frameCount > 0 ? accumulatedRisk / frameCount : 0;
 
         loaderBar.style.width = "100%";
         loaderText.innerText = "Processing complete ✔";
@@ -186,9 +201,10 @@ async function processUploadedVideo(videoElement) {
 
       const progress = videoElement.currentTime / duration;
       loaderBar.style.width = `${(progress * 100).toFixed(0)}%`;
-      loaderText.innerText = `Processing video... ${(progress * 100).toFixed(0)}%`;
+      loaderText.innerText =
+        `Processing video... ${(progress * 100).toFixed(0)}%`;
 
-      videoElement.currentTime += 0.3; // adjust speed here
+      videoElement.currentTime += 0.3;
     });
 
     videoElement.currentTime = 0.01;
@@ -196,11 +212,9 @@ async function processUploadedVideo(videoElement) {
 }
 
 // ===============================
-// Risk UI
+// UI UPDATE
 // ===============================
 function updateRiskUI(risk, structural, texture, behavioral) {
-  if (!riskBar || !status) return;
-
   const percentage = (risk * 100).toFixed(0);
 
   riskBar.style.width = `${percentage}%`;
@@ -222,5 +236,5 @@ Label: ${getRiskLabel(risk)}
 `;
 }
 
-// Initialize
+// Start app
 handleModeChange();
