@@ -28,9 +28,13 @@ let currentMode = "live";
 // Load Models
 // ------------------------------
 async function loadModels() {
-  await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
-  await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
-  console.log("Face-api models loaded ✅");
+  try {
+    await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+    await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
+    console.log("Face-api models loaded ✅");
+  } catch (err) {
+    console.error("Failed to load models:", err);
+  }
 }
 
 await loadModels();
@@ -64,13 +68,16 @@ function handleModeChange() {
 // Webcam
 // ------------------------------
 async function startWebcam() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  video.srcObject = stream;
-
-  video.onloadedmetadata = () => {
-    video.play();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    await video.play();
+    console.log("Webcam running ✅");
     startDetection(video);
-  };
+  } catch (err) {
+    console.error("Webcam error:", err);
+    alert("Cannot access webcam. Check permissions.");
+  }
 }
 
 // ------------------------------
@@ -107,20 +114,27 @@ function startDetection(element) {
 
   detectionInterval = setInterval(async () => {
     try {
-      const detections = await faceapi
+      // --------------------------
+      // Detect face with landmarks
+      // --------------------------
+      const detection = await faceapi
         .detectSingleFace(element, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks();
 
-      if (!detections) return;
+      if (!detection) {
+        // No face detected: show webcam only
+        updateRiskUI(0, 0, 0, 0, true);
+        return;
+      }
 
-      const landmarks = detections.landmarks.positions;
+      const landmarks = detection.landmarks.positions;
       const structural = computeStructuralScore(landmarks);
       const behavioral = computeBehavioralScore(landmarks);
 
       // --------------------------
       // Real Texture Scoring
       // --------------------------
-      const faceBox = detections.detection.box;
+      const faceBox = detection.detection.box;
       const faceTexture = computeFaceTexture(element, faceBox);
       const frameTexture = computeFrameTexture(element);
       const texture = computeTextureScore(faceTexture, frameTexture);
@@ -134,11 +148,11 @@ function startDetection(element) {
       // Update UI
       // --------------------------
       updateRiskUI(risk, structural, texture, behavioral);
-
-      // Debug console
       console.log({ structural, behavioral, texture, risk });
+
     } catch (err) {
       console.error("Detection error:", err);
+      updateRiskUI(0, 0, 0, 0, true); // fallback
     }
   }, 300);
 }
@@ -160,6 +174,7 @@ function distance(p1, p2) {
 }
 
 function computeBehavioralScore(landmarks) {
+  if (!landmarks) return 0;
   const nose = landmarks[30];
   if (!previousNose) {
     previousNose = nose;
@@ -167,10 +182,11 @@ function computeBehavioralScore(landmarks) {
   }
   const movement = distance(nose, previousNose);
   previousNose = nose;
-  return Math.min(movement / 15, 1); // normalize
+  return Math.min(movement / 15, 1);
 }
 
 function computeStructuralScore(landmarks) {
+  if (!landmarks) return 0;
   const leftEye = landmarks[36];
   const rightEye = landmarks[45];
   const nose = landmarks[30];
@@ -202,13 +218,18 @@ function computeFinalRisk({ structural, behavioral, texture }) {
 // ------------------------------
 // Update UI
 // ------------------------------
-function updateRiskUI(risk, structural, texture, behavioral) {
+function updateRiskUI(risk, structural, texture, behavioral, noFace = false) {
   const percentage = (risk * 100).toFixed(0);
   riskBar.style.width = `${percentage}%`;
 
   if (risk < 0.3) riskBar.style.backgroundColor = "green";
   else if (risk < 0.6) riskBar.style.backgroundColor = "orange";
   else riskBar.style.backgroundColor = "red";
+
+  if (noFace) {
+    status.innerText = "No face detected";
+    return;
+  }
 
   status.innerText = `
 Structural: ${structural.toFixed(2)}
