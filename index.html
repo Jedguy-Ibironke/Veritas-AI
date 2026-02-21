@@ -24,11 +24,27 @@
       margin-top: 15px;
       border-radius: 10px;
       border: 2px solid #333;
+      max-width: 640px;
+      max-height: 480px;
     }
 
     #status {
       margin-top: 15px;
       font-size: 18px;
+      white-space: pre-line;
+      text-align: left;
+      max-width: 640px;
+      margin-left: auto;
+      margin-right: auto;
+      background: #222;
+      padding: 15px;
+      border-radius: 10px;
+    }
+
+    #modelStatus {
+      margin-top: 10px;
+      font-size: 16px;
+      color: #aaa;
     }
 
     /* 🔥 Risk Bar */
@@ -52,7 +68,7 @@
 
 <body>
 
-<h2>Live Face Risk Analyzer</h2>
+<h2>🔥 Veritas-AI Face Risk Analyzer</h2>
 
 <h3>Select Input Mode</h3>
 
@@ -73,32 +89,14 @@
   <div id="riskBar"></div>
 </div>
 
-<pre id="status">Loading models...</pre>
+<div id="modelStatus">Initializing...</div>
+<pre id="status">Ready</pre>
 
 <!-- 🔥 Load face-api.js first -->
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
-<!-- Your App -->
-<script type="module">
-  import { startWebcam } from './main.js';
-
-  async function loadModels() {
-    const statusEl = document.getElementById('status');
-    statusEl.innerText = "Loading models...";
-
-    // Load models from ./models folder
-    await faceapi.nets.tinyFaceDetector.loadFromUri("./models/tiny_face_detector");
-    await faceapi.nets.faceLandmark68Net.loadFromUri("./models/face_landmark_68");
-
-    statusEl.innerText = "Models loaded ✅";
-    console.log("Models loaded ✅");
-
-    // Start webcam after models load
-    startWebcam();
-  }
-
-  loadModels();
-</script>
+<!-- Your App - Using type="module" -->
+<script type="module" src="./main.js"></script>
 
 </body>
 </html>
