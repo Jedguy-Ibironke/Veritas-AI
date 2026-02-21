@@ -47,11 +47,6 @@
       background: green;
       transition: width 0.2s ease, background 0.2s ease;
     }
-
-    #modelStatus {
-      margin-bottom: 10px;
-      font-size: 16px;
-    }
   </style>
 </head>
 
@@ -59,9 +54,8 @@
 
 <h2>Live Face Risk Analyzer</h2>
 
-<div id="modelStatus">Loading models…</div>
-
 <h3>Select Input Mode</h3>
+
 <select id="modeSelect">
   <option value="live">Live Webcam</option>
   <option value="image">Upload Image</option>
@@ -72,20 +66,39 @@
 
 <br/>
 
-<video id="video" autoplay muted width="640" height="480"></video>
+<video id="video" autoplay muted width="640" height="480" style="display:none;"></video>
 <img id="imagePreview" width="640" style="display:none;" />
 
 <div id="riskContainer">
   <div id="riskBar"></div>
 </div>
 
-<pre id="status"></pre>
+<pre id="status">Loading models…</pre>
 
-<!-- Load face-api.js -->
+<!-- 🔥 Load face-api.js first -->
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
-<!-- Main JS -->
-<script type="module" src="./main.js"></script>
+<!-- Your App -->
+<script type="module">
+  import { startWebcam } from './main.js';
+
+  async function loadModels() {
+    const statusEl = document.getElementById('status');
+    statusEl.innerText = "Loading models…";
+
+    // Load models from ./models folder
+    await faceapi.nets.tinyFaceDetector.loadFromUri("./models/tiny_face_detector");
+    await faceapi.nets.faceLandmark68Net.loadFromUri("./models/face_landmark_68");
+
+    statusEl.innerText = "Models loaded ✅";
+    console.log("Models loaded ✅");
+
+    // Start webcam after models load
+    startWebcam();
+  }
+
+  loadModels();
+</script>
 
 </body>
 </html>
