@@ -14,6 +14,10 @@ const modeSelect = document.getElementById("modeSelect");
 const riskBar = document.getElementById("riskBar");
 const status = document.getElementById("status");
 
+const videoLoader = document.getElementById("videoLoader");
+const loaderBar = document.getElementById("loaderBar");
+const loaderText = document.getElementById("loaderText");
+
 let currentMode = "live";
 let detectionInterval = null;
 
@@ -32,11 +36,13 @@ function handleModeChange() {
     fileInput.style.display = "none";
     imagePreview.style.display = "none";
     video.style.display = "block";
+    videoLoader.style.display = "none";
     startWebcam();
   } else {
     fileInput.style.display = "inline";
     video.style.display = "none";
     imagePreview.style.display = "none";
+    videoLoader.style.display = "none";
   }
 }
 
@@ -64,7 +70,6 @@ function handleFileUpload(event) {
   if (!file) return;
 
   const url = URL.createObjectURL(file);
-
   stopDetection();
 
   if (currentMode === "image") {
@@ -80,15 +85,14 @@ function handleFileUpload(event) {
     video.src = url;
     video.style.display = "block";
 
-    video.onloadedmetadata = () => {
-      video.play();
-      startDetection(video);
+    video.onloadedmetadata = async () => {
+      await processUploadedVideo(video);
     };
   }
 }
 
 // ===============================
-// Detection Loop
+// Live / Image Detection Loop
 // ===============================
 function startDetection(element) {
   stopDetection();
@@ -99,16 +103,9 @@ function startDetection(element) {
       if (!landmarks) return;
 
       const structural = computeStructuralScore(landmarks);
-
-      const texture =
-        currentMode === "image"
-          ? computeTextureScore(element)
-          : computeTextureScore(element);
-
+      const texture = computeTextureScore(element);
       const behavioral =
-        currentMode === "live" || currentMode === "video"
-          ? computeBehavioralScore(landmarks)
-          : 0;
+        currentMode === "live" ? computeBehavioralScore(landmarks) : 0;
 
       const risk = computeFinalRisk({
         structural,
@@ -118,7 +115,6 @@ function startDetection(element) {
       });
 
       updateRiskUI(risk, structural, texture, behavioral);
-
     } catch (err) {
       console.error("Detection error:", err);
     }
@@ -133,6 +129,73 @@ function stopDetection() {
 }
 
 // ===============================
+// VIDEO PROCESSING LOADER
+// ===============================
+async function processUploadedVideo(videoElement) {
+  videoLoader.style.display = "block";
+  loaderBar.style.width = "0%";
+  loaderText.innerText = "Processing video...";
+
+  const duration = videoElement.duration;
+  let accumulatedRisk = 0;
+  let frameCount = 0;
+
+  videoElement.pause();
+  videoElement.currentTime = 0;
+
+  return new Promise((resolve) => {
+
+    videoElement.addEventListener("seeked", async function processFrame() {
+
+      if (videoElement.currentTime >= duration) {
+
+        const finalRisk = frameCount > 0
+          ? accumulatedRisk / frameCount
+          : 0;
+
+        loaderBar.style.width = "100%";
+        loaderText.innerText = "Processing complete ✔";
+
+        updateRiskUI(finalRisk, 0, 0, 0);
+
+        setTimeout(() => {
+          videoLoader.style.display = "none";
+        }, 1200);
+
+        resolve();
+        return;
+      }
+
+      const landmarks = await detectLandmarks(videoElement);
+
+      if (landmarks) {
+        const structural = computeStructuralScore(landmarks);
+        const texture = computeTextureScore(videoElement);
+        const behavioral = computeBehavioralScore(landmarks);
+
+        const risk = computeFinalRisk({
+          structural,
+          texture,
+          behavioral,
+          source: "video"
+        });
+
+        accumulatedRisk += risk;
+        frameCount++;
+      }
+
+      const progress = videoElement.currentTime / duration;
+      loaderBar.style.width = `${(progress * 100).toFixed(0)}%`;
+      loaderText.innerText = `Processing video... ${(progress * 100).toFixed(0)}%`;
+
+      videoElement.currentTime += 0.3; // adjust speed here
+    });
+
+    videoElement.currentTime = 0.01;
+  });
+}
+
+// ===============================
 // Risk UI
 // ===============================
 function updateRiskUI(risk, structural, texture, behavioral) {
@@ -140,10 +203,8 @@ function updateRiskUI(risk, structural, texture, behavioral) {
 
   const percentage = (risk * 100).toFixed(0);
 
-  // Update width
   riskBar.style.width = `${percentage}%`;
 
-  // Color coding
   if (risk < 0.3) {
     riskBar.style.backgroundColor = "green";
   } else if (risk < 0.6) {
@@ -152,7 +213,6 @@ function updateRiskUI(risk, structural, texture, behavioral) {
     riskBar.style.backgroundColor = "red";
   }
 
-  // Status text
   status.innerText = `
 Structural: ${structural.toFixed(2)}
 Texture: ${texture.toFixed(2)}
@@ -162,7 +222,5 @@ Label: ${getRiskLabel(risk)}
 `;
 }
 
-// ===============================
-// Initialize Default Mode
-// ===============================
+// Initialize
 handleModeChange();
