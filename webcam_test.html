@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Webcam Test</title>
+</head>
+<body>
+  <h2>Webcam Test</h2>
+  <video id="video" autoplay width="640" height="480"></video>
+
+  <script>
+    const video = document.getElementById('video');
+
+    async function startWebcam() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        console.log('Webcam started ✅');
+      } catch (err) {
+        console.error('Webcam error:', err);
+        alert('Could not access webcam. Make sure permissions are allowed.');
+      }
+    }
+
+    startWebcam();
+  </script>
+</body>
+</html>
