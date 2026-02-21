@@ -1,49 +1,40 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>AI Image & Video Detector</title>
-
-  <!-- Face API -->
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-
-  <!-- Main Script -->
-  <script type="module" src="main.js" defer></script>
+  <title>Face Risk Analyzer</title>
 
   <style>
     body {
       font-family: Arial, sans-serif;
+      background: #111;
+      color: white;
       text-align: center;
-      background: #f4f4f4;
-      padding: 20px;
-    }
-
-    h1 {
-      margin-bottom: 20px;
-    }
-
-    video, img {
-      width: 400px;
-      max-width: 90%;
-      margin-top: 20px;
-      border-radius: 10px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
 
     select, input {
       margin: 10px;
       padding: 8px;
-      font-size: 14px;
+      font-size: 16px;
     }
 
-    /* Risk Bar */
-    .risk-container {
-      width: 400px;
-      max-width: 90%;
-      height: 20px;
-      background: #ddd;
-      margin: 20px auto;
+    video, img {
+      margin-top: 15px;
       border-radius: 10px;
+      border: 2px solid #333;
+    }
+
+    #status {
+      margin-top: 15px;
+      font-size: 18px;
+    }
+
+    /* 🔥 Risk Bar */
+    #riskContainer {
+      width: 640px;
+      height: 25px;
+      background: #333;
+      margin: 20px auto;
+      border-radius: 20px;
       overflow: hidden;
     }
 
@@ -51,83 +42,41 @@
       height: 100%;
       width: 0%;
       background: green;
-      transition: width 0.3s ease;
-    }
-
-    #status {
-      margin-top: 10px;
-      white-space: pre-line;
-      font-size: 14px;
-    }
-
-    /* Video Processing Loader */
-    #videoLoader {
-      display: none;
-      margin-top: 20px;
-      width: 400px;
-      max-width: 90%;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    #loaderBarContainer {
-      width: 100%;
-      height: 14px;
-      background: #ddd;
-      border-radius: 10px;
-      overflow: hidden;
-    }
-
-    #loaderBar {
-      height: 100%;
-      width: 0%;
-      background: blue;
-      transition: width 0.2s ease;
-    }
-
-    #loaderText {
-      margin-top: 8px;
-      font-size: 13px;
-      color: #333;
+      transition: width 0.2s ease, background 0.2s ease;
     }
   </style>
 </head>
+
 <body>
 
-  <h1>AI Media Authenticity Detector</h1>
+<h2>Live Face Risk Analyzer</h2>
 
-  <!-- Mode Selector -->
-  <select id="modeSelect">
-    <option value="live">Live Webcam</option>
-    <option value="image">Upload Image</option>
-    <option value="video">Upload Video</option>
-  </select>
+<h3>Select Input Mode</h3>
 
-  <br>
+<select id="modeSelect">
+  <option value="live">Live Webcam</option>
+  <option value="image">Upload Image</option>
+  <option value="video">Upload Video</option>
+</select>
 
-  <!-- File Upload -->
-  <input type="file" id="fileInput" accept="image/*,video/*" />
+<input type="file" id="fileInput" accept="image/*,video/*" style="display:none;" />
 
-  <!-- Video Element -->
-  <video id="video" autoplay muted playsinline></video>
+<br/>
 
-  <!-- Image Preview -->
-  <img id="imagePreview" style="display:none;" />
+<video id="video" autoplay muted width="640" height="480"></video>
+<img id="imagePreview" width="640" style="display:none;" />
 
-  <!-- Risk Bar -->
-  <div class="risk-container">
-    <div id="riskBar"></div>
-  </div>
+<div id="riskContainer">
+  <div id="riskBar"></div>
+</div>
 
-  <p id="status"></p>
+<pre id="status"></pre>
 
-  <!-- Video Processing Loader (ONLY for video mode) -->
-  <div id="videoLoader">
-    <div id="loaderBarContainer">
-      <div id="loaderBar"></div>
-    </div>
-    <p id="loaderText">Processing video...</p>
-  </div>
+<!-- 🔥 IMPORTANT: Load face-api FIRST (no defer) -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<!-- Your App -->
+<script type="module" src="./main.js"></script>
 
 </body>
 </html>
