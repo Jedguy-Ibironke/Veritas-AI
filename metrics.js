@@ -1,6 +1,17 @@
 // ===============================
+// INTERNAL STATE
+// ===============================
+let previousLandmarks = null;
+
+// ===============================
+// RESET FUNCTION (IMPORTANT FIX)
+// ===============================
+export function resetBehavioralState() {
+  previousLandmarks = null;
+}
+
+// ===============================
 // STRUCTURAL SCORE
-// Based on facial landmark symmetry
 // ===============================
 export function computeStructuralScore(landmarks) {
   if (!landmarks || !landmarks.positions) return 0;
@@ -8,7 +19,6 @@ export function computeStructuralScore(landmarks) {
   const points = landmarks.positions;
   if (points.length < 68) return 0;
 
-  // Simple left/right symmetry check
   let asymmetry = 0;
   let count = 0;
 
@@ -23,27 +33,27 @@ export function computeStructuralScore(landmarks) {
   if (count === 0) return 0;
 
   const avgAsymmetry = asymmetry / count;
-
-  // Normalize (tweak divisor if needed)
   return Math.min(avgAsymmetry / 50, 1);
 }
 
 // ===============================
-// TEXTURE SCORE
-// Detects unnatural smoothness
+// TEXTURE SCORE (SAFE VERSION)
 // ===============================
 export function computeTextureScore(mediaElement) {
+  const width =
+    mediaElement.videoWidth ||
+    mediaElement.naturalWidth ||
+    mediaElement.width;
 
-  // Determine correct dimensions
-  const width = mediaElement.videoWidth || mediaElement.naturalWidth || mediaElement.width;
-  const height = mediaElement.videoHeight || mediaElement.naturalHeight || mediaElement.height;
+  const height =
+    mediaElement.videoHeight ||
+    mediaElement.naturalHeight ||
+    mediaElement.height;
 
-  // 🔥 Safety guard (prevents DOMException)
   if (!width || !height || width <= 0 || height <= 0) {
     return 0;
   }
 
-  // Downscale for performance (important for video)
   const SAMPLE_SIZE = 160;
 
   const canvas = document.createElement("canvas");
@@ -54,24 +64,23 @@ export function computeTextureScore(mediaElement) {
 
   try {
     ctx.drawImage(mediaElement, 0, 0, SAMPLE_SIZE, SAMPLE_SIZE);
-  } catch (err) {
+  } catch {
     return 0;
   }
 
   let imageData;
   try {
     imageData = ctx.getImageData(0, 0, SAMPLE_SIZE, SAMPLE_SIZE).data;
-  } catch (err) {
+  } catch {
     return 0;
   }
 
+  const totalPixels = imageData.length / 4;
+  if (!totalPixels) return 0;
+
   let mean = 0;
   let variance = 0;
-  const totalPixels = imageData.length / 4;
 
-  if (totalPixels === 0) return 0;
-
-  // Compute grayscale mean
   for (let i = 0; i < imageData.length; i += 4) {
     const gray = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3;
     mean += gray;
@@ -79,7 +88,6 @@ export function computeTextureScore(mediaElement) {
 
   mean /= totalPixels;
 
-  // Compute variance
   for (let i = 0; i < imageData.length; i += 4) {
     const gray = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3;
     variance += Math.pow(gray - mean, 2);
@@ -87,18 +95,13 @@ export function computeTextureScore(mediaElement) {
 
   variance /= totalPixels;
 
-  // Lower variance = smoother (more AI-like)
   const normalized = 1 - Math.min(variance / 2000, 1);
-
   return normalized;
 }
 
 // ===============================
 // BEHAVIORAL SCORE
-// Detects unnatural landmark motion
 // ===============================
-let previousLandmarks = null;
-
 export function computeBehavioralScore(landmarks) {
   if (!landmarks || !landmarks.positions) return 0;
 
@@ -125,13 +128,11 @@ export function computeBehavioralScore(landmarks) {
   previousLandmarks = current;
 
   const avgMovement = movement / current.length;
-
   return Math.min(avgMovement / 20, 1);
 }
 
 // ===============================
-// FINAL RISK SCORE
-// Weighted combination
+// FINAL RISK
 // ===============================
 export function computeFinalRisk({
   structural = 0,
@@ -139,15 +140,13 @@ export function computeFinalRisk({
   behavioral = 0,
   source = "live"
 }) {
-
-  let risk = 0;
+  let risk;
 
   if (source === "image") {
     risk = 0.6 * structural + 0.4 * texture;
   } else if (source === "video") {
     risk = 0.4 * structural + 0.3 * texture + 0.3 * behavioral;
   } else {
-    // live
     risk = 0.5 * structural + 0.5 * behavioral;
   }
 
@@ -155,7 +154,7 @@ export function computeFinalRisk({
 }
 
 // ===============================
-// RISK LABEL
+// LABEL
 // ===============================
 export function getRiskLabel(risk) {
   if (risk < 0.3) return "Likely Real";
