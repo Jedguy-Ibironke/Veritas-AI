@@ -1,25 +1,27 @@
 let modelsLoaded = false;
 
 async function loadModels() {
-	if (modelsLoaded) return;
+  if (modelsLoaded) return;
 
-	// Make sure models folder is at project root:
-	// /models
-	await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
-	await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
+  await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
+  await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
 
-	modelsLoaded = true;
-	console.log("Models loaded successfully");
+  modelsLoaded = true;
+  console.log("Models loaded successfully");
 }
 
 export async function detectLandmarks(inputElement) {
-	await loadModels();
+  await loadModels();
 
-	const result = await faceapi
-		.detectSingleFace(inputElement, new faceapi.TinyFaceDetectorOptions())
-		.withFaceLandmarks();
+  const result = await faceapi
+    .detectSingleFace(
+      inputElement,
+      new faceapi.TinyFaceDetectorOptions()
+    )
+    .withFaceLandmarks();
 
-	if (!result) return null;
+  if (!result) return null;
 
-	return result.landmarks.positions;
+  // 🔥 FIX: return full landmarks object
+  return result.landmarks;
 }
