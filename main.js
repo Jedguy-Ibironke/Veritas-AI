@@ -18,12 +18,7 @@ const modeSelect = document.getElementById("modeSelect");
 const fileInput = document.getElementById("fileInput");
 const riskBar = document.getElementById("riskBar");
 const status = document.getElementById("status");
-
-// Add model status div
-const modelStatus = document.createElement("div");
-modelStatus.style.marginBottom = "10px";
-modelStatus.style.fontSize = "16px";
-document.body.prepend(modelStatus);
+const modelStatus = document.getElementById("modelStatus");
 
 let currentMode = "live";
 let detectionInterval = null;
@@ -33,8 +28,10 @@ let detectionInterval = null;
 // ---------------------------
 async function loadModels() {
   modelStatus.innerText = "Loading face-api models…";
+
   await faceapi.nets.tinyFaceDetector.loadFromUri("./models/tiny_face_detector");
   await faceapi.nets.faceLandmark68Net.loadFromUri("./models/face_landmark_68");
+
   modelStatus.innerText = "Face-api models loaded ✅";
 }
 
@@ -69,10 +66,8 @@ async function startWebcam() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     video.srcObject = stream;
-    video.onloadedmetadata = () => {
-      video.play();
-      startDetection(video);
-    };
+    video.play();
+    startDetection(video);
   } catch (err) {
     modelStatus.innerText = "❌ Could not access webcam";
     console.error(err);
@@ -110,9 +105,14 @@ function handleFileUpload(event) {
 // ---------------------------
 function startDetection(element) {
   stopDetection();
+
   detectionInterval = setInterval(async () => {
     try {
-      const detection = await detectLandmarks(element);
+      // Direct face-api detection in case detectLandmarks has issues
+      const detection = await faceapi
+        .detectSingleFace(element, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks();
+
       if (!detection || !detection.landmarks) {
         status.innerText = "No face detected";
         riskBar.style.width = "0%";

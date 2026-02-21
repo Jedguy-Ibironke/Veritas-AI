@@ -47,6 +47,11 @@
       background: green;
       transition: width 0.2s ease, background 0.2s ease;
     }
+
+    #modelStatus {
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
   </style>
 </head>
 
@@ -54,8 +59,9 @@
 
 <h2>Live Face Risk Analyzer</h2>
 
-<h3>Select Input Mode</h3>
+<div id="modelStatus">Loading models…</div>
 
+<h3>Select Input Mode</h3>
 <select id="modeSelect">
   <option value="live">Live Webcam</option>
   <option value="image">Upload Image</option>
@@ -75,10 +81,10 @@
 
 <pre id="status"></pre>
 
-<!-- 🔥 Load face-api.js first -->
+<!-- Load face-api.js -->
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
-<!-- Your App -->
+<!-- Main JS -->
 <script type="module" src="./main.js"></script>
 
 </body>
