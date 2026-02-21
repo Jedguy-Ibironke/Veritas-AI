@@ -19,20 +19,18 @@ const modelStatus = document.getElementById("modelStatus");
 
 let currentMode = "live";
 let detectionInterval = null;
-let modelsLoaded = false;
 
-// Load models from the correct path (as confirmed by the test)
+// Load models from the correct path (directly from ./models/)
 async function loadModels() {
   modelStatus.innerText = "Loading models...";
   
   try {
-    // Use the direct path that worked in the test
+    // This matches what worked in your test
     await faceapi.nets.tinyFaceDetector.loadFromUri("./models/");
     await faceapi.nets.faceLandmark68Net.loadFromUri("./models/");
     
-    modelsLoaded = true;
     modelStatus.innerText = "✅ Models loaded!";
-    status.innerText = "Ready - Select an option";
+    console.log("Models loaded successfully");
     
     // Start webcam if in live mode
     if (currentMode === "live") {
@@ -42,11 +40,10 @@ async function loadModels() {
   } catch (error) {
     modelStatus.innerText = "❌ Failed to load models";
     console.error("Model loading error:", error);
-    status.innerText = "Error loading models. Check console.";
   }
 }
 
-// Start loading immediately
+// Start loading
 loadModels();
 
 // Mode switching
@@ -61,11 +58,7 @@ function handleModeChange() {
     fileInput.style.display = "none";
     imagePreview.style.display = "none";
     video.style.display = "block";
-    if (modelsLoaded) {
-      startWebcam();
-    } else {
-      status.innerText = "Loading models...";
-    }
+    startWebcam();
   } else {
     fileInput.style.display = "inline";
     video.style.display = "none";
@@ -95,9 +88,7 @@ function handleFileUpload(event) {
   if (currentMode === "image") {
     imagePreview.src = url;
     imagePreview.style.display = "block";
-    imagePreview.onload = () => {
-      if (modelsLoaded) startDetection(imagePreview);
-    };
+    imagePreview.onload = () => startDetection(imagePreview);
   }
 
   if (currentMode === "video") {
@@ -105,14 +96,12 @@ function handleFileUpload(event) {
     video.style.display = "block";
     video.onloadedmetadata = () => {
       video.play();
-      if (modelsLoaded) startDetection(video);
+      startDetection(video);
     };
   }
 }
 
 function startDetection(element) {
-  if (!modelsLoaded) return;
-  
   stopDetection();
 
   detectionInterval = setInterval(async () => {
@@ -166,5 +155,4 @@ function stopDetection() {
   }
 }
 
-// Initialize
 handleModeChange();
