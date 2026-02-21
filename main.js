@@ -1,18 +1,32 @@
 import { detectLandmarks } from "./landmarks.js";
 import {
-  computeStructuralScore,
-  computeTextureScore,
   computeBehavioralScore,
-  computeFinalRisk,
-  getRiskLabel
+  computeStructuralScore,
+  computeFaceTexture,
+  computeFrameTexture,
+  computeTextureScore
 } from "./metrics.js";
 
-const video = document.getElementById("video");
-const imagePreview = document.getElementById("imagePreview");
-const fileInput = document.getElementById("fileInput");
-const modeSelect = document.getElementById("modeSelect");
-const riskBar = document.getElementById("riskBar");
-const status = document.getElementById("status");
+import { computeISI, getRiskLabel } from "./scoring.js";
+
+const landmarks = detection.landmarks.positions;
+const faceBox = detection.detection.box;
+
+const behavioral = computeBehavioralScore(landmarks);
+const structural = computeStructuralScore(landmarks);
+
+const faceTexture = computeFaceTexture(video, faceBox);
+const frameTexture = computeFrameTexture(video);
+
+const texture = computeTextureScore(faceTexture, frameTexture);
+
+const isi = computeISI({
+  structural,
+  behavioral,
+  texture
+});
+
+const label = getRiskLabel(isi);
 
 let currentMode = "live";
 let detectionInterval = null;
