@@ -4,20 +4,28 @@
 let previousLandmarks = null;
 
 // ===============================
-// RESET FUNCTION (IMPORTANT FIX)
+// RESET FUNCTION
 // ===============================
 export function resetBehavioralState() {
   previousLandmarks = null;
 }
 
 // ===============================
-// STRUCTURAL SCORE
+// STRUCTURAL SCORE (FIXED VERSION)
+// Now normalized relative to face width
 // ===============================
 export function computeStructuralScore(landmarks) {
   if (!landmarks || !landmarks.positions) return 0;
 
   const points = landmarks.positions;
   if (points.length < 68) return 0;
+
+  // Estimate face width using jaw endpoints
+  const leftJaw = points[0];
+  const rightJaw = points[16];
+
+  const faceWidth = Math.abs(rightJaw.x - leftJaw.x);
+  if (!faceWidth || faceWidth === 0) return 0;
 
   let asymmetry = 0;
   let count = 0;
@@ -33,11 +41,15 @@ export function computeStructuralScore(landmarks) {
   if (count === 0) return 0;
 
   const avgAsymmetry = asymmetry / count;
-  return Math.min(avgAsymmetry / 50, 1);
+
+  // Normalize relative to face width (resolution independent)
+  const normalized = avgAsymmetry / faceWidth;
+
+  return Math.min(Math.max(normalized, 0), 1);
 }
 
 // ===============================
-// TEXTURE SCORE (SAFE VERSION)
+// TEXTURE SCORE
 // ===============================
 export function computeTextureScore(mediaElement) {
   const width =
@@ -96,6 +108,7 @@ export function computeTextureScore(mediaElement) {
   variance /= totalPixels;
 
   const normalized = 1 - Math.min(variance / 2000, 1);
+
   return normalized;
 }
 
@@ -128,6 +141,7 @@ export function computeBehavioralScore(landmarks) {
   previousLandmarks = current;
 
   const avgMovement = movement / current.length;
+
   return Math.min(avgMovement / 20, 1);
 }
 
