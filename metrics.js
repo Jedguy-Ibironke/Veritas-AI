@@ -1,6 +1,6 @@
 // ===============================
 // metrics.js
-// Identity Stability Index (ISI)
+// Multi-layer Synthetic Detection
 // ===============================
 
 // -----------------------------
@@ -13,9 +13,8 @@ function distance(p1, p2) {
 }
 
 // ==============================
-// BEHAVIORAL (Temporal Jitter)
+// 1️⃣ BEHAVIORAL (Temporal Jitter)
 // ==============================
-
 let previousLandmarks = null;
 
 export function computeBehavioralScore(landmarks) {
@@ -27,7 +26,6 @@ export function computeBehavioralScore(landmarks) {
   }
 
   let totalMovement = 0;
-
   for (let i = 0; i < landmarks.length; i++) {
     totalMovement += distance(landmarks[i], previousLandmarks[i]);
   }
@@ -41,9 +39,8 @@ export function computeBehavioralScore(landmarks) {
 }
 
 // ==============================
-// STRUCTURAL (Temporal Consistency)
+// 2️⃣ STRUCTURAL (Temporal Consistency)
 // ==============================
-
 let previousRatio = null;
 
 export function computeStructuralScore(landmarks) {
@@ -67,35 +64,18 @@ export function computeStructuralScore(landmarks) {
   const diff = Math.abs(ratio - previousRatio);
   previousRatio = ratio;
 
-  // If structure fluctuates → suspicious
+  // Fluctuation = suspicious
   const instability = Math.min(diff / 0.05, 1);
 
   return 1 - instability;
 }
 
 // ==============================
-// TEXTURE (Face-Only Variance)
+// 3️⃣ TEXTURE (Dual Region)
 // ==============================
 
-export function computeTextureScore(videoElement, faceBox) {
-  if (!faceBox) return 0;
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-
-  const { x, y, width, height } = faceBox;
-
-  canvas.width = width;
-  canvas.height = height;
-
-  ctx.drawImage(
-    videoElement,
-    x, y, width, height,
-    0, 0, width, height
-  );
-
-  const data = ctx.getImageData(0, 0, width, height).data;
-
+// Helper: compute variance from pixel data
+function computeVarianceFromImageData(data) {
   let mean = 0;
   let variance = 0;
   const totalPixels = data.length / 4;
@@ -112,58 +92,45 @@ export function computeTextureScore(videoElement, faceBox) {
     variance += Math.pow(gray - mean, 2);
   }
 
-  variance /= totalPixels;
-
-  // AI faces often overly smooth → low variance
-  const smoothness = 1 - Math.min(variance / 2500, 1);
-
-  return smoothness;
+  return variance / totalPixels;
 }
 
-// ==============================
-// SLIDING WINDOW SMOOTHING
-// ==============================
+// Face-only texture
+export function computeFaceTexture(video, faceBox) {
+  if (!faceBox) return 0;
 
-const windowSize = 10;
-let isiWindow = [];
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
 
-function smoothISI(currentISI) {
-  isiWindow.push(currentISI);
-  if (isiWindow.length > windowSize) {
-    isiWindow.shift();
-  }
+  const { x, y, width, height } = faceBox;
 
-  const sum = isiWindow.reduce((a, b) => a + b, 0);
-  return sum / isiWindow.length;
+  canvas.width = width;
+  canvas.height = height;
+
+  ctx.drawImage(video, x, y, width, height, 0, 0, width, height);
+  const data = ctx.getImageData(0, 0, width, height).data;
+  const variance = computeVarianceFromImageData(data);
+
+  // Over-smoothed = low variance
+  return 1 - Math.min(variance / 2500, 1);
 }
 
-// ==============================
-// FINAL IDENTITY STABILITY INDEX
-// ==============================
+// Whole-frame texture
+export function computeFrameTexture(video) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
 
-export function computeISI({
-  structural,
-  behavioral,
-  texture
-}) {
-  // Convert instability → stability
-  const temporalStability = 1 - behavioral;
-  const textureRealism = 1 - texture;
+  canvas.width = video.videoWidth || video.width;
+  canvas.height = video.videoHeight || video.height;
 
-  const rawISI =
-    structural *
-    temporalStability *
-    textureRealism;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-  return smoothISI(rawISI);
+  const variance = computeVarianceFromImageData(data);
+  return 1 - Math.min(variance / 3000, 1);
 }
 
-// ==============================
-//  LABEL
-// ==============================
-
-export function getRiskLabel(isi) {
-  if (isi > 0.75) return "🟢 Stable Identity (Likely Human)";
-  if (isi > 0.45) return "🟡 Moderate Stability";
-  return "🔴 Unstable Identity (Likely Synthetic)";
+// Combined texture score
+export function computeTextureScore(faceTexture, frameTexture) {
+  return 0.7 * faceTexture + 0.3 * frameTexture;
 }
