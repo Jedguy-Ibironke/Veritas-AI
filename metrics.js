@@ -1,24 +1,24 @@
 // ===============================
 // metrics.js
-// Multi-layer Synthetic Detection
+// Clean Stable Version
 // ===============================
 
 // -----------------------------
-// Utility: Euclidean distance
+// Utility
 // -----------------------------
 function distance(p1, p2) {
-  const dx = p2._x - p1._x;
-  const dy = p2._y - p1._y;
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
 // -----------------------------
-// Behavioral Instability
+// Behavioral Score (movement)
 // -----------------------------
 let previousNose = null;
 
 export function computeBehavioralScore(landmarks) {
-  if (!landmarks) return 0;
+  if (!landmarks || landmarks.length < 68) return 0;
 
   const nose = landmarks[30];
 
@@ -30,15 +30,14 @@ export function computeBehavioralScore(landmarks) {
   const movement = distance(nose, previousNose);
   previousNose = nose;
 
-  // Normalize (15px typical movement max)
   return Math.min(movement / 15, 1);
 }
 
 // -----------------------------
-// Structural Score
+// Structural Score (symmetry + ratio)
 // -----------------------------
 export function computeStructuralScore(landmarks) {
-  if (!landmarks) return 0;
+  if (!landmarks || landmarks.length < 68) return 0;
 
   const leftEye = landmarks[36];
   const rightEye = landmarks[45];
@@ -46,18 +45,20 @@ export function computeStructuralScore(landmarks) {
   const jawLeft = landmarks[0];
   const jawRight = landmarks[16];
 
-  // Symmetry
-  const leftDist = Math.abs(leftEye._x - nose._x);
-  const rightDist = Math.abs(rightEye._x - nose._x);
-  const symmetryDiff = Math.abs(leftDist - rightDist);
+  if (!leftEye || !rightEye || !nose || !jawLeft || !jawRight) return 0;
 
+  // Symmetry check
+  const leftDist = Math.abs(leftEye.x - nose.x);
+  const rightDist = Math.abs(rightEye.x - nose.x);
+  const symmetryDiff = Math.abs(leftDist - rightDist);
   const symmetryScore = 1 - Math.min(symmetryDiff / 20, 1);
 
-  // Eye ratio
-  const eyeDistance = Math.abs(rightEye._x - leftEye._x);
-  const faceWidth = Math.abs(jawRight._x - jawLeft._x);
-  const ratio = eyeDistance / faceWidth;
+  // Eye-to-face ratio
+  const eyeDistance = Math.abs(rightEye.x - leftEye.x);
+  const faceWidth = Math.abs(jawRight.x - jawLeft.x);
+  if (!faceWidth) return 0;
 
+  const ratio = eyeDistance / faceWidth;
   const idealRatio = 0.45;
   const ratioDiff = Math.abs(ratio - idealRatio);
   const ratioScore = 1 - Math.min(ratioDiff / 0.15, 1);
@@ -66,24 +67,46 @@ export function computeStructuralScore(landmarks) {
 }
 
 // -----------------------------
-// Texture Score (Over-smoothing)
+// Texture Score (variance check)
 // -----------------------------
-export function computeTextureScore(imageElement) {
+export function computeTextureScore(element) {
+  const width =
+    element.videoWidth ||
+    element.naturalWidth ||
+    element.width;
+
+  const height =
+    element.videoHeight ||
+    element.naturalHeight ||
+    element.height;
+
+  if (!width || !height) return 0;
+
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
 
-  canvas.width = imageElement.width;
-  canvas.height = imageElement.height;
+  canvas.width = width;
+  canvas.height = height;
 
-  ctx.drawImage(imageElement, 0, 0);
+  try {
+    ctx.drawImage(element, 0, 0);
+  } catch {
+    return 0;
+  }
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let data;
+  try {
+    data = ctx.getImageData(0, 0, width, height).data;
+  } catch {
+    return 0;
+  }
+
+  const totalPixels = data.length / 4;
+  if (!totalPixels) return 0;
 
   let mean = 0;
   let variance = 0;
-  const totalPixels = data.length / 4;
 
-  // Compute mean grayscale
   for (let i = 0; i < data.length; i += 4) {
     const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
     mean += gray;
@@ -91,7 +114,6 @@ export function computeTextureScore(imageElement) {
 
   mean /= totalPixels;
 
-  // Compute variance
   for (let i = 0; i < data.length; i += 4) {
     const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
     variance += Math.pow(gray - mean, 2);
@@ -99,19 +121,16 @@ export function computeTextureScore(imageElement) {
 
   variance /= totalPixels;
 
-  // AI images often overly smooth → low variance
-  const normalized = 1 - Math.min(variance / 2000, 1);
-
-  return normalized;
+  return 1 - Math.min(variance / 2000, 1);
 }
 
 // -----------------------------
-// Final Risk Combiner
+// Final Risk
 // -----------------------------
 export function computeFinalRisk({
-  structural,
-  texture,
-  behavioral,
+  structural = 0,
+  texture = 0,
+  behavioral = 0,
   source
 }) {
   let score;
@@ -119,7 +138,6 @@ export function computeFinalRisk({
   if (source === "image") {
     score = 0.6 * structural + 0.4 * texture;
   } else {
-    // live or video
     score = 0.4 * structural + 0.4 * behavioral + 0.2 * texture;
   }
 
@@ -127,7 +145,7 @@ export function computeFinalRisk({
 }
 
 // -----------------------------
-// Risk Label
+// Label
 // -----------------------------
 export function getRiskLabel(score) {
   if (score < 0.3) return "Likely Human";
