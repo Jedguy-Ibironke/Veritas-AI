@@ -1,10 +1,10 @@
-// metrics.js
 // ===============================
-// Face & Frame Texture Scoring
+// metrics.js
+// Identity Stability Engine
 // ===============================
 
 // ------------------------------
-// Utility: Euclidean distance (for landmarks if needed)
+// Utility: Euclidean distance
 // ------------------------------
 export function distance(p1, p2) {
   const dx = p2.x - p1.x;
@@ -12,78 +12,160 @@ export function distance(p1, p2) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-// ------------------------------
-// Face Texture: extract face region and compute variance
-// ------------------------------
-export function computeFaceTexture(videoOrImage, box) {
+// ==============================
+// BEHAVIORAL (Temporal Jitter)
+// ==============================
+
+let previousLandmarks = null;
+
+export function computeBehavioralScore(landmarks) {
+  if (!landmarks) return 0;
+
+  if (!previousLandmarks) {
+    previousLandmarks = landmarks;
+    return 0;
+  }
+
+  let totalMovement = 0;
+
+  for (let i = 0; i < landmarks.length; i++) {
+    totalMovement += distance(landmarks[i], previousLandmarks[i]);
+  }
+
+  previousLandmarks = landmarks;
+
+  const avgMovement = totalMovement / landmarks.length;
+
+  // Normalize (10px typical upper jitter bound)
+  return Math.min(avgMovement / 10, 1);
+}
+
+// ==============================
+// STRUCTURAL (Geometry Stability)
+// ==============================
+
+let previousRatio = null;
+
+export function computeStructuralScore(landmarks) {
+  if (!landmarks) return 1;
+
+  const leftEye = landmarks[36];
+  const rightEye = landmarks[45];
+  const jawLeft = landmarks[0];
+  const jawRight = landmarks[16];
+
+  const eyeDistance = Math.abs(rightEye.x - leftEye.x);
+  const faceWidth = Math.abs(jawRight.x - jawLeft.x);
+
+  const ratio = eyeDistance / faceWidth;
+
+  if (!previousRatio) {
+    previousRatio = ratio;
+    return 1;
+  }
+
+  const diff = Math.abs(ratio - previousRatio);
+  previousRatio = ratio;
+
+  // Larger fluctuation = less stable
+  const instability = Math.min(diff / 0.05, 1);
+
+  return 1 - instability;
+}
+
+// ==============================
+// TEXTURE (Face-Only Smoothness)
+// ==============================
+
+export function computeTextureScore(videoOrImage, faceBox) {
+  if (!faceBox) return 0;
+
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
 
-  canvas.width = box.width;
-  canvas.height = box.height;
+  const { x, y, width, height } = faceBox;
+
+  canvas.width = width;
+  canvas.height = height;
 
   ctx.drawImage(
     videoOrImage,
-    box.x,
-    box.y,
-    box.width,
-    box.height,
-    0,
-    0,
-    box.width,
-    box.height
+    x, y, width, height,
+    0, 0, width, height
   );
 
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
-}
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
 
-// ------------------------------
-// Full Frame Texture
-// ------------------------------
-export function computeFrameTexture(videoOrImage) {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
+  let mean = 0;
+  let variance = 0;
+  const totalPixels = data.length / 4;
 
-  canvas.width = videoOrImage.videoWidth || videoOrImage.width;
-  canvas.height = videoOrImage.videoHeight || videoOrImage.height;
-
-  ctx.drawImage(videoOrImage, 0, 0, canvas.width, canvas.height);
-
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
-}
-
-// ------------------------------
-// Texture Score: lower variance = more AI-smooth
-// ------------------------------
-export function computeTextureScore(faceData, frameData) {
-  function variance(imageData) {
-    const data = imageData.data;
-    const totalPixels = data.length / 4;
-
-    // Compute mean grayscale
-    let mean = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      mean += gray;
-    }
-    mean /= totalPixels;
-
-    // Compute variance
-    let varSum = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      varSum += (gray - mean) ** 2;
-    }
-    return varSum / totalPixels;
+  // Compute grayscale mean
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+    mean += gray;
   }
 
-  const faceVar = variance(faceData);
-  const frameVar = variance(frameData);
+  mean /= totalPixels;
 
-  // Normalize (rough heuristic: high variance = more natural)
-  const normalizedFace = 1 - Math.min(faceVar / 2000, 1);
-  const normalizedFrame = 1 - Math.min(frameVar / 2000, 1);
+  // Compute variance
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+    variance += Math.pow(gray - mean, 2);
+  }
 
-  // Combine scores: 50% face + 50% full frame
-  return (normalizedFace + normalizedFrame) / 2;
+  variance /= totalPixels;
+
+  // AI faces often overly smooth → low variance
+  const smoothness = 1 - Math.min(variance / 2500, 1);
+
+  return smoothness;
+}
+
+// ==============================
+// SLIDING WINDOW SMOOTHING
+// ==============================
+
+const windowSize = 10;
+let isiWindow = [];
+
+function smoothISI(currentISI) {
+  isiWindow.push(currentISI);
+  if (isiWindow.length > windowSize) {
+    isiWindow.shift();
+  }
+
+  const sum = isiWindow.reduce((a, b) => a + b, 0);
+  return sum / isiWindow.length;
+}
+
+// ==============================
+// FINAL IDENTITY STABILITY INDEX
+// ==============================
+
+export function computeISI({
+  structural,
+  behavioral,
+  texture
+}) {
+  const temporalStability = 1 - behavioral;
+  const textureRealism = 1 - texture;
+
+  const rawISI =
+    structural *
+    temporalStability *
+    textureRealism;
+
+  return smoothISI(rawISI);
+}
+
+// ==============================
+// LABEL
+// ==============================
+
+export function getRiskLabel(isi) {
+  if (isi > 0.75) return "🟢 Stable Identity (Likely Human)";
+  if (isi > 0.45) return "🟡 Moderate Stability";
+  return "🔴 Unstable Identity (Likely Synthetic)";
 }
