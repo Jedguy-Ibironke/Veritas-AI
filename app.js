@@ -20,7 +20,7 @@ async function loadModels() {
 
 loadModels();
 
-/* ---------------- TAB SWITCHING ---------------- */
+/* ---------------- TAB SWITCH ---------------- */
 
 tabs.forEach(tab => {
   tab.addEventListener("click", () => {
@@ -43,10 +43,7 @@ tabs.forEach(tab => {
 uploadArea.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", e => {
-  handleFile(e.target.files[0]);
-});
-
-function handleFile(file) {
+  const file = e.target.files[0];
   if (!file) return;
 
   const url = URL.createObjectURL(file);
@@ -55,29 +52,24 @@ function handleFile(file) {
     imagePreview.src = url;
     imagePreview.style.display = "block";
     video.style.display = "none";
-
-    imagePreview.onload = () => {
-      startDetection(imagePreview);
-    };
+    imagePreview.onload = () => startDetection(imagePreview);
   }
 
   if (currentMode === "video") {
     video.src = url;
     video.style.display = "block";
     imagePreview.style.display = "none";
-
     video.onloadeddata = () => {
       video.play();
       startDetection(video);
     };
   }
-}
+});
 
 /* ---------------- WEBCAM ---------------- */
 
 async function startWebcam() {
   const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-
   video.srcObject = stream;
   video.style.display = "block";
   imagePreview.style.display = "none";
@@ -88,41 +80,7 @@ async function startWebcam() {
   };
 }
 
-/* ---------------- ANALYSIS ---------------- */
-
-async function analyzeFace(element, box) {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-
-  const size = 224;
-  canvas.width = size;
-  canvas.height = size;
-
-  ctx.drawImage(
-    element,
-    box.x,
-    box.y,
-    box.width,
-    box.height,
-    0,
-    0,
-    size,
-    size
-  );
-
-  const predictions = await mobilenetModel.classify(canvas);
-  const confidence = predictions[0].probability;
-
-  const risk = 1 - confidence;
-
-  return {
-    label: predictions[0].className,
-    confidence,
-    risk
-  };
-}
-
-/* ---------------- DETECTION LOOP ---------------- */
+/* ---------------- DETECTION ---------------- */
 
 function startDetection(element) {
   stopDetection();
@@ -141,15 +99,36 @@ function startDetection(element) {
       return;
     }
 
-    const result = await analyzeFace(element, detection.box);
-    const percent = Math.min(100, Math.max(0, result.risk * 100));
+    const box = detection.box;
 
-    updateRisk(percent);
+    const canvas = document.createElement("canvas");
+    canvas.width = 224;
+    canvas.height = 224;
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(
+      element,
+      box.x,
+      box.y,
+      box.width,
+      box.height,
+      0,
+      0,
+      224,
+      224
+    );
+
+    const predictions = await mobilenetModel.classify(canvas);
+
+    const confidence = predictions[0].probability;
+    const risk = (1 - confidence) * 100;
+
+    updateRisk(risk);
 
     status.innerText = `
-Top Classification: ${result.label}
-Model Confidence: ${(result.confidence * 100).toFixed(2)}%
-Synthetic Risk: ${percent.toFixed(1)}%
+Top Classification: ${predictions[0].className}
+Model Confidence: ${(confidence * 100).toFixed(2)}%
+Synthetic Risk: ${risk.toFixed(1)}%
     `;
   }, 1000);
 }
@@ -173,13 +152,4 @@ function updateRisk(value) {
 function stopDetection() {
   if (detectionInterval) {
     clearInterval(detectionInterval);
-    detectionInterval = null;
-  }
-}
-
-function resetUI() {
-  imagePreview.style.display = "none";
-  video.style.display = "none";
-  status.innerText = "";
-  updateRisk(0);
-}
+    detectionInterval = null
