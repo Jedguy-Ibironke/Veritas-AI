@@ -43,14 +43,14 @@
     </div>
   </section>
 
-  <!-- ✅ Load TensorFlow FIRST -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+  <!-- ✅ TensorFlow 3.x (IMPORTANT) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
 
-  <!-- ✅ Then load Face API -->
+  <!-- ✅ Face API -->
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
-  <!-- ✅ Then MobileNet -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+  <!-- ✅ MobileNet (TF3 compatible) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
 
   <!-- App -->
   <script type="module" src="app.js"></script>
