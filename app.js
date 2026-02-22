@@ -152,4 +152,13 @@ function updateRisk(value) {
 function stopDetection() {
   if (detectionInterval) {
     clearInterval(detectionInterval);
-    detectionInterval = null
+    detectionInterval = null;
+  }
+}
+
+function resetUI() {
+  imagePreview.style.display = "none";
+  video.style.display = "none";
+  status.innerText = "";
+  updateRisk(0);
+}
