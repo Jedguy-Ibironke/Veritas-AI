@@ -1,7 +1,3 @@
-// ===============================
-// Veritas.ai - Full Working App
-// ===============================
-
 import {
   computeBehavioralScore,
   computeStructuralScore,
@@ -12,9 +8,6 @@ import {
 
 import { computeISI, getRiskLabel } from "./scoring.js";
 
-// -----------------------------
-// DOM Elements (MATCHES YOUR HTML)
-// -----------------------------
 const tabs = document.querySelectorAll(".tab");
 const uploadArea = document.getElementById("uploadArea");
 const fileInput = document.getElementById("fileInput");
@@ -26,66 +19,39 @@ const status = document.getElementById("status");
 let currentMode = "image";
 let detectionInterval = null;
 
-// -----------------------------
-// Load FaceAPI Models
-// -----------------------------
 async function loadModels() {
   await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
   await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
   console.log("Models loaded");
 }
-
 loadModels();
 
-// -----------------------------
-// TAB SWITCHING
-// -----------------------------
 tabs.forEach(tab => {
   tab.addEventListener("click", () => {
     tabs.forEach(t => t.classList.remove("active"));
     tab.classList.add("active");
-
     currentMode = tab.dataset.mode;
 
     stopDetection();
     resetUI();
 
-    if (currentMode === "live") {
-      startWebcam();
-    }
+    if (currentMode === "live") startWebcam();
   });
 });
 
-// -----------------------------
-// Drag & Drop
-// -----------------------------
 uploadArea.addEventListener("click", () => fileInput.click());
 
-uploadArea.addEventListener("dragover", e => {
-  e.preventDefault();
-  uploadArea.style.borderColor = "#00ffcc";
-});
-
-uploadArea.addEventListener("dragleave", () => {
-  uploadArea.style.borderColor = "#555";
-});
+uploadArea.addEventListener("dragover", e => e.preventDefault());
 
 uploadArea.addEventListener("drop", e => {
   e.preventDefault();
-  uploadArea.style.borderColor = "#555";
-
-  const file = e.dataTransfer.files[0];
-  handleFile(file);
+  handleFile(e.dataTransfer.files[0]);
 });
 
 fileInput.addEventListener("change", e => {
-  const file = e.target.files[0];
-  handleFile(file);
+  handleFile(e.target.files[0]);
 });
 
-// -----------------------------
-// Handle File
-// -----------------------------
 function handleFile(file) {
   if (!file) return;
 
@@ -95,7 +61,6 @@ function handleFile(file) {
     imagePreview.src = url;
     imagePreview.style.display = "block";
     video.style.display = "none";
-
     imagePreview.onload = () => startDetection(imagePreview);
   }
 
@@ -103,40 +68,28 @@ function handleFile(file) {
     video.src = url;
     video.style.display = "block";
     imagePreview.style.display = "none";
-
     video.onloadeddata = () => {
       video.play();
-      setTimeout(() => startDetection(video), 300);
+      startDetection(video);
     };
   }
 }
 
-// -----------------------------
-// Webcam
-// -----------------------------
 async function startWebcam() {
   const stream = await navigator.mediaDevices.getUserMedia({ video: true });
   video.srcObject = stream;
   video.style.display = "block";
   imagePreview.style.display = "none";
-
   video.onloadeddata = () => {
     video.play();
     startDetection(video);
   };
 }
 
-// -----------------------------
-// Detection Engine
-// -----------------------------
 function startDetection(element) {
   stopDetection();
 
   detectionInterval = setInterval(async () => {
-    if (element.tagName === "VIDEO") {
-      if (element.videoWidth === 0) return;
-    }
-
     const detection = await faceapi
       .detectSingleFace(
         element,
@@ -155,8 +108,8 @@ function startDetection(element) {
 
     const landmarks = detection.landmarks.positions;
 
-    const behavioral = computeBehavioralScore(landmarks);
     const structural = computeStructuralScore(landmarks);
+    const behavioral = computeBehavioralScore(landmarks);
     const faceTexture = computeFaceTexture(element, detection.detection.box);
     const frameTexture = computeFrameTexture(element);
     const texture = computeTextureScore(faceTexture, frameTexture);
@@ -167,22 +120,22 @@ function startDetection(element) {
       texture
     });
 
-    const percent = Math.min(100, Math.max(0, isi * 100));
+    // 🔥 INVERTED RISK LOGIC
+    const riskScore = 1 - isi;
+    const percent = Math.min(100, Math.max(0, riskScore * 100));
+
     updateRisk(percent);
 
     status.innerText = `
 Structural: ${structural.toFixed(2)}
 Behavioral: ${behavioral.toFixed(2)}
 Texture: ${texture.toFixed(2)}
-ISI: ${isi.toFixed(2)}
-${getRiskLabel(isi)}
+ISI (Stability): ${isi.toFixed(2)}
+Risk Level: ${getRiskLabel(isi)}
     `;
-  }, 500);
+  }, 600);
 }
 
-// -----------------------------
-// Risk Bar
-// -----------------------------
 function updateRisk(value) {
   riskBar.style.width = value + "%";
 
@@ -195,7 +148,6 @@ function updateRisk(value) {
   }
 }
 
-// -----------------------------
 function stopDetection() {
   if (detectionInterval) {
     clearInterval(detectionInterval);
