@@ -8,30 +8,45 @@
 body {
   background: radial-gradient(circle at top, #0f172a, #020617);
   color: white;
+  min-height: 100vh;
   text-align: center;
 }
 
+/* NAVBAR */
 nav {
-  padding: 20px;
+  padding: 20px 40px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .logo {
-  font-size: 22px;
-  font-weight: bold;
+  font-size: 20px;
+  font-weight: 700;
   color: #38bdf8;
 }
 
+/* HERO */
 .hero {
-  padding: 60px 20px;
+  padding: 70px 20px;
 }
 
+.hero h1 {
+  font-size: 40px;
+  margin-bottom: 20px;
+}
+
+.hero p {
+  opacity: 0.7;
+  max-width: 600px;
+  margin: 0 auto 40px auto;
+}
+
+/* TABS */
 .tabs {
-  margin: 30px 0;
+  margin-bottom: 30px;
 }
 
 .tab {
-  padding: 12px 20px;
+  padding: 12px 22px;
   margin: 5px;
   border-radius: 30px;
   border: none;
@@ -39,29 +54,79 @@ nav {
   color: white;
   cursor: pointer;
   transition: 0.3s;
+  font-size: 14px;
+}
+
+.tab:hover {
+  background: rgba(255,255,255,0.1);
 }
 
 .tab.active {
   background: #38bdf8;
   color: black;
+  font-weight: 600;
 }
 
+/* UPLOAD BOX */
 .upload-box {
-  max-width: 600px;
-  margin: 20px auto;
-  padding: 60px;
+  max-width: 650px;
+  margin: 0 auto;
+  padding: 70px 20px;
   border-radius: 20px;
   border: 2px dashed rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.02);
+  backdrop-filter: blur(10px);
   cursor: pointer;
+  transition: 0.3s;
 }
 
 .upload-box.dragover {
   border-color: #38bdf8;
+  background: rgba(56,189,248,0.1);
 }
 
-video, img {
+/* MEDIA */
+video,
+img {
   display: none;
   margin-top: 30px;
-  max-width: 600px;
+  max-width: 650px;
+  width: 100%;
   border-radius: 15px;
+  box-shadow: 0 0 30px rgba(0,0,0,0.4);
+}
+
+/* ANALYSIS SECTION */
+.analysis {
+  max-width: 650px;
+  margin: 40px auto 0 auto;
+}
+
+/* RISK BAR */
+.risk-container {
+  width: 100%;
+  height: 22px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 30px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+#riskBar {
+  height: 100%;
+  width: 0%;
+  background: green;
+  transition: width 0.4s ease, background 0.4s ease;
+}
+
+/* STATUS TEXT */
+#status {
+  text-align: left;
+  font-size: 14px;
+  opacity: 0.85;
+  background: rgba(255,255,255,0.03);
+  padding: 15px;
+  border-radius: 12px;
+  min-height: 80px;
+  white-space: pre-wrap;
 }
