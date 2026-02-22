@@ -1,8 +1,7 @@
 // ===============================
-// app.js
+// Veritas.ai - Full Working App
 // ===============================
 
-import { detectLandmarks } from "./landmarks.js";
 import {
   computeBehavioralScore,
   computeStructuralScore,
@@ -10,105 +9,94 @@ import {
   computeFrameTexture,
   computeTextureScore
 } from "./metrics.js";
+
 import { computeISI, getRiskLabel } from "./scoring.js";
 
 // -----------------------------
-// DOM Elements
+// DOM Elements (MATCHES YOUR HTML)
 // -----------------------------
+const tabs = document.querySelectorAll(".tab");
+const uploadArea = document.getElementById("uploadArea");
+const fileInput = document.getElementById("fileInput");
 const video = document.getElementById("video");
 const imagePreview = document.getElementById("imagePreview");
-const modeSelect = document.getElementById("modeSelect");
-const fileInput = document.getElementById("fileInput");
 const riskBar = document.getElementById("riskBar");
 const status = document.getElementById("status");
-const modelStatus = document.getElementById("modelStatus");
 
-let currentMode = "live";
+let currentMode = "image";
 let detectionInterval = null;
 
 // -----------------------------
-// Load Models
+// Load FaceAPI Models
 // -----------------------------
 async function loadModels() {
-  modelStatus.innerText = "Loading models...";
-
-  try {
-    await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
-    await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
-
-    modelStatus.innerText = "✅ Models loaded";
-
-    if (currentMode === "live") {
-      startWebcam();
-    }
-
-  } catch (error) {
-    modelStatus.innerText = "❌ Failed to load models";
-    console.error(error);
-  }
+  await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
+  await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
+  console.log("Models loaded");
 }
 
 loadModels();
 
 // -----------------------------
-// Mode Switching
+// TAB SWITCHING
 // -----------------------------
-modeSelect.addEventListener("change", handleModeChange);
-fileInput.addEventListener("change", handleFileUpload);
+tabs.forEach(tab => {
+  tab.addEventListener("click", () => {
+    tabs.forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
 
-function handleModeChange() {
-  currentMode = modeSelect.value;
-  stopDetection();
+    currentMode = tab.dataset.mode;
 
-  if (currentMode === "live") {
-    fileInput.style.display = "none";
-    imagePreview.style.display = "none";
-    video.style.display = "block";
-    startWebcam();
-  } else {
-    fileInput.style.display = "inline";
-    video.style.display = "none";
-    imagePreview.style.display = "none";
-  }
-}
+    stopDetection();
+    resetUI();
+
+    if (currentMode === "live") {
+      startWebcam();
+    }
+  });
+});
 
 // -----------------------------
-// Webcam
+// Drag & Drop
 // -----------------------------
-async function startWebcam() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
+uploadArea.addEventListener("click", () => fileInput.click());
 
-    video.onloadeddata = async () => {
-      await video.play();
-      startDetection(video);
-    };
+uploadArea.addEventListener("dragover", e => {
+  e.preventDefault();
+  uploadArea.style.borderColor = "#00ffcc";
+});
 
-  } catch (err) {
-    modelStatus.innerText = "❌ Webcam access denied";
-    console.error(err);
-  }
-}
+uploadArea.addEventListener("dragleave", () => {
+  uploadArea.style.borderColor = "#555";
+});
+
+uploadArea.addEventListener("drop", e => {
+  e.preventDefault();
+  uploadArea.style.borderColor = "#555";
+
+  const file = e.dataTransfer.files[0];
+  handleFile(file);
+});
+
+fileInput.addEventListener("change", e => {
+  const file = e.target.files[0];
+  handleFile(file);
+});
 
 // -----------------------------
-// File Upload (Image / Video)
+// Handle File
 // -----------------------------
-function handleFileUpload(event) {
-  const file = event.target.files[0];
+function handleFile(file) {
   if (!file) return;
 
   const url = URL.createObjectURL(file);
-  stopDetection();
 
   if (currentMode === "image") {
     imagePreview.src = url;
     imagePreview.style.display = "block";
     video.style.display = "none";
 
-    imagePreview.onload = () => {
-      startDetection(imagePreview);
-    };
+    imagePreview.onload = () => startDetection(imagePreview);
   }
 
   if (currentMode === "video") {
@@ -116,15 +104,26 @@ function handleFileUpload(event) {
     video.style.display = "block";
     imagePreview.style.display = "none";
 
-    video.onloadeddata = async () => {
-      await video.play();
-
-      // Give video time to render first frame
-      setTimeout(() => {
-        startDetection(video);
-      }, 300);
+    video.onloadeddata = () => {
+      video.play();
+      setTimeout(() => startDetection(video), 300);
     };
   }
+}
+
+// -----------------------------
+// Webcam
+// -----------------------------
+async function startWebcam() {
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+  video.srcObject = stream;
+  video.style.display = "block";
+  imagePreview.style.display = "none";
+
+  video.onloadeddata = () => {
+    video.play();
+    startDetection(video);
+  };
 }
 
 // -----------------------------
@@ -134,72 +133,66 @@ function startDetection(element) {
   stopDetection();
 
   detectionInterval = setInterval(async () => {
-    try {
+    if (element.tagName === "VIDEO") {
+      if (element.videoWidth === 0) return;
+    }
 
-      // Skip if video not ready
-      if (element.tagName === "VIDEO") {
-        if (element.videoWidth === 0 || element.videoHeight === 0) return;
-      }
+    const detection = await faceapi
+      .detectSingleFace(
+        element,
+        new faceapi.TinyFaceDetectorOptions({
+          inputSize: 512,
+          scoreThreshold: 0.3
+        })
+      )
+      .withFaceLandmarks();
 
-      const detection = await faceapi
-        .detectSingleFace(
-          element,
-          new faceapi.TinyFaceDetectorOptions({
-            inputSize: 512,
-            scoreThreshold: 0.25
-          })
-        )
-        .withFaceLandmarks();
+    if (!detection) {
+      status.innerText = "No face detected";
+      updateRisk(0);
+      return;
+    }
 
-      if (!detection) {
-        status.innerText = "No face detected";
-        updateRiskBar(0, "green");
-        return;
-      }
+    const landmarks = detection.landmarks.positions;
 
-      const landmarks = detection.landmarks.positions;
+    const behavioral = computeBehavioralScore(landmarks);
+    const structural = computeStructuralScore(landmarks);
+    const faceTexture = computeFaceTexture(element, detection.detection.box);
+    const frameTexture = computeFrameTexture(element);
+    const texture = computeTextureScore(faceTexture, frameTexture);
 
-      const behavioral = computeBehavioralScore(landmarks);
-      const structural = computeStructuralScore(landmarks);
-      const faceTexture = computeFaceTexture(element, detection.detection.box);
-      const frameTexture = computeFrameTexture(element);
-      const texture = computeTextureScore(faceTexture, frameTexture);
+    const isi = computeISI({
+      structural,
+      behavioral,
+      texture
+    });
 
-      const isi = computeISI({
-        structural,
-        behavioral,
-        texture
-      });
+    const percent = Math.min(100, Math.max(0, isi * 100));
+    updateRisk(percent);
 
-      const label = getRiskLabel(isi);
-      const percentage = Math.min(100, Math.max(0, isi * 100)).toFixed(0);
-
-      let color = "green";
-      if (isi > 0.6) color = "red";
-      else if (isi > 0.3) color = "orange";
-
-      updateRiskBar(percentage, color);
-
-      status.innerText = `
+    status.innerText = `
 Structural: ${structural.toFixed(2)}
 Behavioral: ${behavioral.toFixed(2)}
 Texture: ${texture.toFixed(2)}
-ISI: ${isi.toFixed(2)} (${percentage}%)
-${label}
-`;
-
-    } catch (err) {
-      console.error("Detection error:", err);
-    }
-  }, 400);
+ISI: ${isi.toFixed(2)}
+${getRiskLabel(isi)}
+    `;
+  }, 500);
 }
 
 // -----------------------------
-// Risk Bar Helper
+// Risk Bar
 // -----------------------------
-function updateRiskBar(value, color) {
-  riskBar.style.width = `${value}%`;
-  riskBar.style.backgroundColor = color;
+function updateRisk(value) {
+  riskBar.style.width = value + "%";
+
+  if (value > 60) {
+    riskBar.style.background = "#ff3b3b";
+  } else if (value > 30) {
+    riskBar.style.background = "#ffaa00";
+  } else {
+    riskBar.style.background = "#00cc66";
+  }
 }
 
 // -----------------------------
@@ -210,5 +203,9 @@ function stopDetection() {
   }
 }
 
-// Initialize
-handleModeChange();
+function resetUI() {
+  imagePreview.style.display = "none";
+  video.style.display = "none";
+  status.innerText = "";
+  updateRisk(0);
+}
