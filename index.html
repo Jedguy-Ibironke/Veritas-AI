@@ -4,204 +4,36 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Veritas.ai</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
-<style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: "Inter", sans-serif;
-}
-
-body {
-  background: radial-gradient(circle at top, #0f172a, #020617);
-  color: white;
-}
-
-/* NAVBAR */
-nav {
-  display: flex;
-  justify-content: space-between;
-  padding: 20px 60px;
-  align-items: center;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-.logo {
-  font-size: 22px;
-  font-weight: 700;
-  color: #38bdf8;
-}
-
-.toggle {
-  background: rgba(255,255,255,0.05);
-  padding: 8px 16px;
-  border-radius: 20px;
-  cursor: pointer;
-}
-
-/* HERO */
-.hero {
-  text-align: center;
-  padding: 80px 20px;
-}
-
-.hero h1 {
-  font-size: 42px;
-  margin-bottom: 20px;
-}
-
-.hero p {
-  opacity: 0.7;
-  max-width: 600px;
-  margin: auto;
-  margin-bottom: 40px;
-}
-
-/* TABS */
-.tabs {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 30px;
-}
-
-.tab {
-  padding: 12px 24px;
-  border-radius: 30px;
-  background: rgba(255,255,255,0.05);
-  cursor: pointer;
-  transition: 0.3s;
-}
-
-.tab:hover {
-  background: rgba(255,255,255,0.1);
-}
-
-/* UPLOAD BOX */
-.upload-box {
-  max-width: 800px;
-  margin: auto;
-  padding: 80px 20px;
-  border-radius: 20px;
-  border: 1px dashed rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.02);
-  backdrop-filter: blur(10px);
-}
-
-.upload-box h3 {
-  margin-bottom: 10px;
-}
-
-.upload-box p {
-  opacity: 0.5;
-}
-
-/* FEATURES */
-.features {
-  margin-top: 120px;
-  padding: 0 60px 100px;
-  text-align: center;
-}
-
-.features h2 {
-  font-size: 32px;
-  margin-bottom: 10px;
-}
-
-.features p {
-  opacity: 0.6;
-  margin-bottom: 50px;
-}
-
-.cards {
-  display: flex;
-  gap: 30px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.card {
-  width: 300px;
-  padding: 30px;
-  border-radius: 20px;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.05);
-  transition: 0.3s;
-}
-
-.card:hover {
-  transform: translateY(-5px);
-  border-color: #38bdf8;
-}
-
-.card h3 {
-  margin-bottom: 15px;
-  color: #38bdf8;
-}
-
-.card p {
-  opacity: 0.6;
-  font-size: 14px;
-}
-</style>
+<link rel="stylesheet" href="style.css">
+<script defer src="app.js"></script>
 </head>
 
 <body>
 
 <nav>
   <div class="logo">Veritas.ai</div>
-  <div class="toggle">Dark</div>
 </nav>
 
 <section class="hero">
   <h1>Upload Media for Analysis</h1>
   <p>
-    Our advanced AI system analyzes your media across multiple dimensions
-    to detect deepfakes with industry-leading accuracy.
+    Advanced AI system analyzes media across multiple dimensions to detect deepfakes.
   </p>
 
   <div class="tabs">
-    <div class="tab">Upload Photo</div>
-    <div class="tab">Upload Video</div>
-    <div class="tab">Live Camera Feed</div>
+    <button class="tab active" data-mode="image">Upload Photo</button>
+    <button class="tab" data-mode="video">Upload Video</button>
+    <button class="tab" data-mode="live">Live Camera Feed</button>
   </div>
 
-  <div class="upload-box">
-    <h3>Drag & drop your photo here</h3>
-    <p>or click to browse</p>
+  <div id="uploadArea" class="upload-box">
+    <p id="uploadText">Drag & drop your photo here or click to browse</p>
+    <input type="file" id="fileInput" hidden>
   </div>
-</section>
 
-<section class="features">
-  <h2>How Our AI Detection Works</h2>
-  <p>
-    Powered by cutting-edge machine learning algorithms trained on millions of media samples
-  </p>
-
-  <div class="cards">
-    <div class="card">
-      <h3>Deep Neural Networks</h3>
-      <p>
-        Our ensemble of CNNs analyzes visual artifacts and unnatural facial patterns.
-      </p>
-    </div>
-
-    <div class="card">
-      <h3>Audio-Visual Sync</h3>
-      <p>
-        Detects mismatches between audio waveforms and lip movement patterns.
-      </p>
-    </div>
-
-    <div class="card">
-      <h3>Digital Forensics</h3>
-      <p>
-        Metadata analysis and compression artifacts reveal manipulation.
-      </p>
-    </div>
-  </div>
+  <video id="video" autoplay muted playsinline></video>
+  <img id="imagePreview" />
 </section>
 
 </body>
