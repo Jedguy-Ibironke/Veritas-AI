@@ -8,7 +8,6 @@ import {
 } from "./metrics.js";
 import { computeISI, getRiskLabel } from "./scoring.js";
 
-// DOM Elements
 const video = document.getElementById("video");
 const imagePreview = document.getElementById("imagePreview");
 const modeSelect = document.getElementById("modeSelect");
@@ -19,34 +18,38 @@ const modelStatus = document.getElementById("modelStatus");
 
 let currentMode = "live";
 let detectionInterval = null;
+let modelsReady = false;
 
-// Load models from the correct path (directly from ./models/)
+// ===============================
+// LOAD MODELS
+// ===============================
+
 async function loadModels() {
   modelStatus.innerText = "Loading models...";
-  
+
   try {
-    // This matches what worked in your test
     await faceapi.nets.tinyFaceDetector.loadFromUri("./models/");
     await faceapi.nets.faceLandmark68Net.loadFromUri("./models/");
-    
+
+    modelsReady = true;
     modelStatus.innerText = "✅ Models loaded!";
-    console.log("Models loaded successfully");
-    
-    // Start webcam if in live mode
+
     if (currentMode === "live") {
       startWebcam();
     }
-    
+
   } catch (error) {
     modelStatus.innerText = "❌ Failed to load models";
     console.error("Model loading error:", error);
   }
 }
 
-// Start loading
 loadModels();
 
-// Mode switching
+// ===============================
+// MODE SWITCHING
+// ===============================
+
 modeSelect.addEventListener("change", handleModeChange);
 fileInput.addEventListener("change", handleFileUpload);
 
@@ -66,7 +69,13 @@ function handleModeChange() {
   }
 }
 
+// ===============================
+// WEBCAM
+// ===============================
+
 async function startWebcam() {
+  if (!modelsReady) return;
+
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     video.srcObject = stream;
@@ -78,6 +87,10 @@ async function startWebcam() {
   }
 }
 
+// ===============================
+// FILE UPLOAD
+// ===============================
+
 function handleFileUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -88,12 +101,17 @@ function handleFileUpload(event) {
   if (currentMode === "image") {
     imagePreview.src = url;
     imagePreview.style.display = "block";
-    imagePreview.onload = () => startDetection(imagePreview);
+
+    imagePreview.onload = async () => {
+      await new Promise(r => setTimeout(r, 200));
+      startDetection(imagePreview);
+    };
   }
 
   if (currentMode === "video") {
     video.src = url;
     video.style.display = "block";
+
     video.onloadedmetadata = () => {
       video.play();
       startDetection(video);
@@ -101,10 +119,16 @@ function handleFileUpload(event) {
   }
 }
 
+// ===============================
+// DETECTION LOOP
+// ===============================
+
 function startDetection(element) {
   stopDetection();
 
   detectionInterval = setInterval(async () => {
+    if (!modelsReady) return;
+
     try {
       const detection = await faceapi
         .detectSingleFace(element, new faceapi.TinyFaceDetectorOptions())
@@ -124,6 +148,7 @@ function startDetection(element) {
 
       const faceTexture = computeFaceTexture(element, detection.detection.box);
       const frameTexture = computeFrameTexture(element);
+
       const texture = computeTextureScore(faceTexture, frameTexture);
 
       const isi = computeISI({ structural, behavioral, texture });
@@ -131,17 +156,20 @@ function startDetection(element) {
 
       const percentage = (isi * 100).toFixed(0);
       riskBar.style.width = `${percentage}%`;
-      if (isi < 0.3) riskBar.style.backgroundColor = "green";
-      else if (isi < 0.6) riskBar.style.backgroundColor = "orange";
+
+      // ✅ FIXED COLOR LOGIC
+      if (isi > 0.75) riskBar.style.backgroundColor = "green";
+      else if (isi > 0.45) riskBar.style.backgroundColor = "orange";
       else riskBar.style.backgroundColor = "red";
 
       status.innerText = `
-Structural Score: ${structural.toFixed(2)}
-Behavioral Score: ${behavioral.toFixed(2)}
-Texture Score: ${texture.toFixed(2)}
-Final Risk (ISI): ${isi.toFixed(2)} (${percentage}%)
-Label: ${label}
+Structural: ${structural.toFixed(2)}
+Behavioral: ${behavioral.toFixed(2)}
+Texture: ${texture.toFixed(2)}
+ISI: ${isi.toFixed(2)} (${percentage}%)
+${label}
 `;
+
     } catch (err) {
       console.error("Detection error:", err);
     }
