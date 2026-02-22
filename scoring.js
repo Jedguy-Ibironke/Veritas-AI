@@ -11,25 +11,28 @@ function smooth(value) {
   if (isiHistory.length > windowSize) {
     isiHistory.shift();
   }
-
   const sum = isiHistory.reduce((a, b) => a + b, 0);
   return sum / isiHistory.length;
 }
 
 // -----------------------------
-// Compute ISI (multi-modal fusion)
+// Compute ISI (weighted fusion)
 // -----------------------------
 export function computeISI({ structural, behavioral, texture }) {
   const temporalStability = 1 - behavioral;
   const textureRealism = 1 - texture;
 
-  const rawISI = structural * temporalStability * textureRealism;
+  // ✅ Weighted average (stable for live demo)
+  const rawISI =
+    (structural * 0.4) +
+    (temporalStability * 0.3) +
+    (textureRealism * 0.3);
 
   return smooth(rawISI);
 }
 
 // -----------------------------
-// Explainable Labels
+// Labels
 // -----------------------------
 export function getRiskLabel(isi) {
   if (isi > 0.75) return "🟢 Stable Identity (Likely Human)";
