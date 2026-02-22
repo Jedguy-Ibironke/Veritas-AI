@@ -8,6 +8,8 @@ import {
 
 import { computeISI, getRiskLabel } from "./scoring.js";
 
+/* ------------------ DOM ELEMENTS ------------------ */
+
 const tabs = document.querySelectorAll(".tab");
 const uploadArea = document.getElementById("uploadArea");
 const fileInput = document.getElementById("fileInput");
@@ -16,28 +18,40 @@ const imagePreview = document.getElementById("imagePreview");
 const riskBar = document.getElementById("riskBar");
 const status = document.getElementById("status");
 
+/* ------------------ STATE ------------------ */
+
 let currentMode = "image";
 let detectionInterval = null;
+
+/* ------------------ LOAD MODELS ------------------ */
 
 async function loadModels() {
   await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
   await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
   console.log("Models loaded");
 }
+
 loadModels();
+
+/* ------------------ TAB SWITCHING ------------------ */
 
 tabs.forEach(tab => {
   tab.addEventListener("click", () => {
     tabs.forEach(t => t.classList.remove("active"));
     tab.classList.add("active");
+
     currentMode = tab.dataset.mode;
 
     stopDetection();
     resetUI();
 
-    if (currentMode === "live") startWebcam();
+    if (currentMode === "live") {
+      startWebcam();
+    }
   });
 });
+
+/* ------------------ FILE UPLOAD ------------------ */
 
 uploadArea.addEventListener("click", () => fileInput.click());
 
@@ -61,13 +75,17 @@ function handleFile(file) {
     imagePreview.src = url;
     imagePreview.style.display = "block";
     video.style.display = "none";
-    imagePreview.onload = () => startDetection(imagePreview);
+
+    imagePreview.onload = () => {
+      startDetection(imagePreview);
+    };
   }
 
   if (currentMode === "video") {
     video.src = url;
     video.style.display = "block";
     imagePreview.style.display = "none";
+
     video.onloadeddata = () => {
       video.play();
       startDetection(video);
@@ -75,16 +93,25 @@ function handleFile(file) {
   }
 }
 
+/* ------------------ WEBCAM ------------------ */
+
 async function startWebcam() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  video.srcObject = stream;
-  video.style.display = "block";
-  imagePreview.style.display = "none";
-  video.onloadeddata = () => {
-    video.play();
-    startDetection(video);
-  };
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    video.style.display = "block";
+    imagePreview.style.display = "none";
+
+    video.onloadeddata = () => {
+      video.play();
+      startDetection(video);
+    };
+  } catch (err) {
+    console.error("Webcam error:", err);
+  }
 }
+
+/* ------------------ DETECTION LOOP ------------------ */
 
 function startDetection(element) {
   stopDetection();
@@ -94,14 +121,14 @@ function startDetection(element) {
       .detectSingleFace(
         element,
         new faceapi.TinyFaceDetectorOptions({
-          inputSize: 512,
-          scoreThreshold: 0.3
+          inputSize: 608,        // higher detail
+          scoreThreshold: 0.15   // more sensitive
         })
       )
       .withFaceLandmarks();
 
     if (!detection) {
-      status.innerText = "No face detected";
+      status.innerText = "No face detected...";
       updateRisk(0);
       return;
     }
@@ -120,7 +147,7 @@ function startDetection(element) {
       texture
     });
 
-    // 🔥 INVERTED RISK LOGIC
+    /* 🔥 INVERTED RISK LOGIC */
     const riskScore = 1 - isi;
     const percent = Math.min(100, Math.max(0, riskScore * 100));
 
@@ -133,20 +160,24 @@ Texture: ${texture.toFixed(2)}
 ISI (Stability): ${isi.toFixed(2)}
 Risk Level: ${getRiskLabel(isi)}
     `;
-  }, 600);
+  }, 700);
 }
+
+/* ------------------ RISK BAR ------------------ */
 
 function updateRisk(value) {
   riskBar.style.width = value + "%";
 
   if (value > 60) {
-    riskBar.style.background = "#ff3b3b";
+    riskBar.style.background = "#ff3b3b"; // High Risk
   } else if (value > 30) {
-    riskBar.style.background = "#ffaa00";
+    riskBar.style.background = "#ffaa00"; // Medium
   } else {
-    riskBar.style.background = "#00cc66";
+    riskBar.style.background = "#00cc66"; // Stable
   }
 }
+
+/* ------------------ CLEANUP ------------------ */
 
 function stopDetection() {
   if (detectionInterval) {
