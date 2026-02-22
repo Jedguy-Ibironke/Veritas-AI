@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Veritas.ai - Deepfake Detection</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav>
+  <div class="logo">🛡 Veritas.ai</div>
+</nav>
+
+<section class="hero">
+  <h1>Upload Media for Analysis</h1>
+  <p>
+    Our AI analyzes structural, behavioral, and texture signals
+    to detect synthetic manipulation.
+  </p>
+
+  <div class="tabs">
+    <button class="tab active" data-mode="image">Upload Photo</button>
+    <button class="tab" data-mode="video">Upload Video</button>
+    <button class="tab" data-mode="live">Live Camera Feed</button>
+  </div>
+
+  <div id="uploadArea" class="upload-box">
+    <p>Drag & drop file here or click to browse</p>
+    <input type="file" id="fileInput" hidden>
+  </div>
+
+  <video id="video" autoplay muted playsinline></video>
+  <img id="imagePreview" />
+
+  <div class="analysis">
+    <div class="risk-container">
+      <div id="riskBar"></div>
+    </div>
+    <pre id="status"></pre>
+  </div>
+</section>
+
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script type="module" src="app.js"></script>
+
+</body>
+</html>
