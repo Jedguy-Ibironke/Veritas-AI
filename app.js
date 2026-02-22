@@ -8,19 +8,18 @@ const status = document.getElementById("status");
 
 let currentMode = "image";
 let detectionInterval = null;
-let mobilenetModel = null;
+let model = null;
 
-/* ---------------- LOAD MODELS ---------------- */
+/* ---------------- LOAD MODEL ---------------- */
 
-async function loadModels() {
-  await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
-  mobilenetModel = await mobilenet.load();
-  console.log("Models loaded successfully");
+async function loadModel() {
+  model = await mobilenet.load();
+  console.log("MobileNet loaded successfully");
 }
 
-loadModels();
+loadModel();
 
-/* ---------------- TAB SWITCH ---------------- */
+/* ---------------- TAB SWITCHING ---------------- */
 
 tabs.forEach(tab => {
   tab.addEventListener("click", () => {
@@ -52,13 +51,15 @@ fileInput.addEventListener("change", e => {
     imagePreview.src = url;
     imagePreview.style.display = "block";
     video.style.display = "none";
-    imagePreview.onload = () => startDetection(imagePreview);
+
+    imagePreview.onload = () => analyze(imagePreview);
   }
 
   if (currentMode === "video") {
     video.src = url;
     video.style.display = "block";
     imagePreview.style.display = "none";
+
     video.onloadeddata = () => {
       video.play();
       startDetection(video);
@@ -69,56 +70,30 @@ fileInput.addEventListener("change", e => {
 /* ---------------- WEBCAM ---------------- */
 
 async function startWebcam() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-  video.srcObject = stream;
-  video.style.display = "block";
-  imagePreview.style.display = "none";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
 
-  video.onloadeddata = () => {
-    video.play();
-    startDetection(video);
-  };
+    video.srcObject = stream;
+    video.style.display = "block";
+    imagePreview.style.display = "none";
+
+    video.onloadeddata = () => {
+      video.play();
+      startDetection(video);
+    };
+  } catch (err) {
+    console.error("Webcam error:", err);
+    status.innerText = "Webcam access denied.";
+  }
 }
 
-/* ---------------- DETECTION ---------------- */
+/* ---------------- ANALYSIS ---------------- */
 
-function startDetection(element) {
-  stopDetection();
+async function analyze(element) {
+  if (!model) return;
 
-  detectionInterval = setInterval(async () => {
-    if (!mobilenetModel) return;
-
-    const detection = await faceapi.detectSingleFace(
-      element,
-      new faceapi.TinyFaceDetectorOptions({ inputSize: 416 })
-    );
-
-    if (!detection) {
-      status.innerText = "No face detected...";
-      updateRisk(0);
-      return;
-    }
-
-    const box = detection.box;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = 224;
-    canvas.height = 224;
-    const ctx = canvas.getContext("2d");
-
-    ctx.drawImage(
-      element,
-      box.x,
-      box.y,
-      box.width,
-      box.height,
-      0,
-      0,
-      224,
-      224
-    );
-
-    const predictions = await mobilenetModel.classify(canvas);
+  try {
+    const predictions = await model.classify(element);
 
     const confidence = predictions[0].probability;
     const risk = (1 - confidence) * 100;
@@ -130,17 +105,28 @@ Top Classification: ${predictions[0].className}
 Model Confidence: ${(confidence * 100).toFixed(2)}%
 Synthetic Risk: ${risk.toFixed(1)}%
     `;
-  }, 1000);
+  } catch (err) {
+    console.error("Analysis error:", err);
+  }
+}
+
+function startDetection(element) {
+  stopDetection();
+
+  detectionInterval = setInterval(() => {
+    analyze(element);
+  }, 1500);
 }
 
 /* ---------------- RISK BAR ---------------- */
 
 function updateRisk(value) {
-  riskBar.style.width = value + "%";
+  const safeValue = Math.max(0, Math.min(100, value));
+  riskBar.style.width = safeValue + "%";
 
-  if (value > 60) {
+  if (safeValue > 60) {
     riskBar.style.background = "#ff3b3b";
-  } else if (value > 30) {
+  } else if (safeValue > 30) {
     riskBar.style.background = "#ffaa00";
   } else {
     riskBar.style.background = "#00cc66";
