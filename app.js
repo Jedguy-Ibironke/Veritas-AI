@@ -1,3 +1,8 @@
+// ===============================
+// app.js
+// ===============================
+
+import { detectLandmarks } from "./landmarks.js";
 import {
   computeBehavioralScore,
   computeStructuralScore,
@@ -5,84 +10,96 @@ import {
   computeFrameTexture,
   computeTextureScore
 } from "./metrics.js";
-
 import { computeISI, getRiskLabel } from "./scoring.js";
 
-/* ===============================
-   DOM REFERENCES
-================================= */
-const tabs = document.querySelectorAll(".tab");
-const uploadArea = document.getElementById("uploadArea");
-const fileInput = document.getElementById("fileInput");
+// -----------------------------
+// DOM Elements
+// -----------------------------
 const video = document.getElementById("video");
 const imagePreview = document.getElementById("imagePreview");
+const modeSelect = document.getElementById("modeSelect");
+const fileInput = document.getElementById("fileInput");
 const riskBar = document.getElementById("riskBar");
 const status = document.getElementById("status");
+const modelStatus = document.getElementById("modelStatus");
 
-let currentMode = "image";
-let stream = null;
+let currentMode = "live";
 let detectionInterval = null;
-let modelsReady = false;
 
-/* ===============================
-   LOAD FACE-API MODELS
-================================= */
+// -----------------------------
+// Load Models
+// -----------------------------
 async function loadModels() {
+  modelStatus.innerText = "Loading models...";
+
   try {
-    console.log("Loading models...");
     await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
     await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
-    modelsReady = true;
-    console.log("✅ Models loaded successfully");
-  } catch (err) {
-    console.error("❌ Model loading failed:", err);
+
+    modelStatus.innerText = "✅ Models loaded";
+
+    if (currentMode === "live") {
+      startWebcam();
+    }
+
+  } catch (error) {
+    modelStatus.innerText = "❌ Failed to load models";
+    console.error(error);
   }
 }
 
-await loadModels();
+loadModels();
 
-/* ===============================
-   TAB SWITCHING
-================================= */
-tabs.forEach(tab => {
-  tab.addEventListener("click", () => {
-    tabs.forEach(t => t.classList.remove("active"));
-    tab.classList.add("active");
-    currentMode = tab.dataset.mode;
-    resetView();
-  });
-});
+// -----------------------------
+// Mode Switching
+// -----------------------------
+modeSelect.addEventListener("change", handleModeChange);
+fileInput.addEventListener("change", handleFileUpload);
 
-/* ===============================
-   FILE UPLOAD + DRAG DROP
-================================= */
-uploadArea.addEventListener("click", () => {
-  if (currentMode !== "live") fileInput.click();
-});
+function handleModeChange() {
+  currentMode = modeSelect.value;
+  stopDetection();
 
-uploadArea.addEventListener("dragover", e => {
-  e.preventDefault();
-  uploadArea.classList.add("dragover");
-});
+  if (currentMode === "live") {
+    fileInput.style.display = "none";
+    imagePreview.style.display = "none";
+    video.style.display = "block";
+    startWebcam();
+  } else {
+    fileInput.style.display = "inline";
+    video.style.display = "none";
+    imagePreview.style.display = "none";
+  }
+}
 
-uploadArea.addEventListener("dragleave", () => {
-  uploadArea.classList.remove("dragover");
-});
+// -----------------------------
+// Webcam
+// -----------------------------
+async function startWebcam() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
 
-uploadArea.addEventListener("drop", e => {
-  e.preventDefault();
-  uploadArea.classList.remove("dragover");
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
-});
+    video.onloadeddata = async () => {
+      await video.play();
+      startDetection(video);
+    };
 
-fileInput.addEventListener("change", e => {
-  const file = e.target.files[0];
-  if (file) handleFile(file);
-});
+  } catch (err) {
+    modelStatus.innerText = "❌ Webcam access denied";
+    console.error(err);
+  }
+}
 
-function handleFile(file) {
+// -----------------------------
+// File Upload (Image / Video)
+// -----------------------------
+function handleFileUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
   const url = URL.createObjectURL(file);
+  stopDetection();
 
   if (currentMode === "image") {
     imagePreview.src = url;
@@ -90,7 +107,6 @@ function handleFile(file) {
     video.style.display = "none";
 
     imagePreview.onload = () => {
-      console.log("Image loaded → starting detection");
       startDetection(imagePreview);
     };
   }
@@ -100,117 +116,99 @@ function handleFile(file) {
     video.style.display = "block";
     imagePreview.style.display = "none";
 
-    video.onloadedmetadata = () => {
-      video.play();
-      console.log("Video loaded → starting detection");
-      startDetection(video);
+    video.onloadeddata = async () => {
+      await video.play();
+
+      // Give video time to render first frame
+      setTimeout(() => {
+        startDetection(video);
+      }, 300);
     };
   }
 }
 
-/* ===============================
-   LIVE CAMERA
-================================= */
-async function startCamera() {
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
-    video.style.display = "block";
-    imagePreview.style.display = "none";
-    video.play();
-
-    console.log("Camera started → detection running");
-    startDetection(video);
-  } catch (err) {
-    console.error("Camera error:", err);
-  }
-}
-
-tabs.forEach(tab => {
-  if (tab.dataset.mode === "live") {
-    tab.addEventListener("click", startCamera);
-  }
-});
-
-function stopCamera() {
-  if (stream) {
-    stream.getTracks().forEach(track => track.stop());
-    stream = null;
-  }
-}
-
-/* ===============================
-   DETECTION LOOP
-================================= */
+// -----------------------------
+// Detection Engine
+// -----------------------------
 function startDetection(element) {
-  if (!modelsReady) {
-    console.warn("Models not ready yet.");
-    return;
-  }
-
   stopDetection();
 
   detectionInterval = setInterval(async () => {
-    const detection = await faceapi
-      .detectSingleFace(element, new faceapi.TinyFaceDetectorOptions())
-      .withFaceLandmarks();
+    try {
 
-    if (!detection) {
-      status.textContent = "No face detected.";
-      riskBar.style.width = "0%";
-      return;
+      // Skip if video not ready
+      if (element.tagName === "VIDEO") {
+        if (element.videoWidth === 0 || element.videoHeight === 0) return;
+      }
+
+      const detection = await faceapi
+        .detectSingleFace(
+          element,
+          new faceapi.TinyFaceDetectorOptions({
+            inputSize: 512,
+            scoreThreshold: 0.25
+          })
+        )
+        .withFaceLandmarks();
+
+      if (!detection) {
+        status.innerText = "No face detected";
+        updateRiskBar(0, "green");
+        return;
+      }
+
+      const landmarks = detection.landmarks.positions;
+
+      const behavioral = computeBehavioralScore(landmarks);
+      const structural = computeStructuralScore(landmarks);
+      const faceTexture = computeFaceTexture(element, detection.detection.box);
+      const frameTexture = computeFrameTexture(element);
+      const texture = computeTextureScore(faceTexture, frameTexture);
+
+      const isi = computeISI({
+        structural,
+        behavioral,
+        texture
+      });
+
+      const label = getRiskLabel(isi);
+      const percentage = Math.min(100, Math.max(0, isi * 100)).toFixed(0);
+
+      let color = "green";
+      if (isi > 0.6) color = "red";
+      else if (isi > 0.3) color = "orange";
+
+      updateRiskBar(percentage, color);
+
+      status.innerText = `
+Structural: ${structural.toFixed(2)}
+Behavioral: ${behavioral.toFixed(2)}
+Texture: ${texture.toFixed(2)}
+ISI: ${isi.toFixed(2)} (${percentage}%)
+${label}
+`;
+
+    } catch (err) {
+      console.error("Detection error:", err);
     }
-
-    const landmarks = detection.landmarks.positions;
-
-    const behavioral = computeBehavioralScore(landmarks);
-    const structural = computeStructuralScore(landmarks);
-
-    const faceTexture = computeFaceTexture(
-      element,
-      detection.detection.box
-    );
-    const frameTexture = computeFrameTexture(element);
-    const texture = computeTextureScore(faceTexture, frameTexture);
-
-    const isi = computeISI({ structural, behavioral, texture });
-    const label = getRiskLabel(isi);
-
-    updateUI(structural, behavioral, texture, isi, label);
   }, 400);
 }
 
+// -----------------------------
+// Risk Bar Helper
+// -----------------------------
+function updateRiskBar(value, color) {
+  riskBar.style.width = `${value}%`;
+  riskBar.style.backgroundColor = color;
+}
+
+// -----------------------------
 function stopDetection() {
-  if (detectionInterval) clearInterval(detectionInterval);
+  if (detectionInterval) {
+    clearInterval(detectionInterval);
+    detectionInterval = null;
+  }
 }
 
-/* ===============================
-   UI UPDATE
-================================= */
-function updateUI(structural, behavioral, texture, isi, label) {
-  const percent = Math.max(0, Math.min(isi * 100, 100));
-  riskBar.style.width = percent + "%";
-
-  if (isi > 0.75) riskBar.style.background = "green";
-  else if (isi > 0.45) riskBar.style.background = "orange";
-  else riskBar.style.background = "red";
-
-  status.textContent =
-`Structural: ${structural.toFixed(2)}
-Behavioral: ${behavioral.toFixed(2)}
-Texture: ${texture.toFixed(2)}
-ISI: ${isi.toFixed(2)}
-${label}`;
-}
-
-/* ===============================
-   RESET VIEW
-================================= */
-function resetView() {
-  stopCamera();
-  stopDetection();
-  imagePreview.style.display = "none";
-  video.style.display = "none";
-  riskBar.style.width = "0%";
-  status.textContent = "";
-}
+// Initialize
+handleModeChange();
