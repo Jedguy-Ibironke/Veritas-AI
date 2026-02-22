@@ -13,12 +13,8 @@ let mobilenetModel = null;
 /* ---------------- LOAD MODELS ---------------- */
 
 async function loadModels() {
-  // Load face detection model from local /models folder
   await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
-
-  // Load MobileNet
   mobilenetModel = await mobilenet.load();
-
   console.log("Models loaded successfully");
 }
 
@@ -102,7 +98,6 @@ async function analyzeFace(element, box) {
   canvas.width = size;
   canvas.height = size;
 
-  // Crop face region into square
   ctx.drawImage(
     element,
     box.x,
@@ -116,16 +111,14 @@ async function analyzeFace(element, box) {
   );
 
   const predictions = await mobilenetModel.classify(canvas);
+  const confidence = predictions[0].probability;
 
-  const topConfidence = predictions[0].probability;
-
-  // Higher confidence = more likely real
-  const riskScore = 1 - topConfidence;
+  const risk = 1 - confidence;
 
   return {
     label: predictions[0].className,
-    confidence: topConfidence,
-    risk: riskScore
+    confidence,
+    risk
   };
 }
 
@@ -149,15 +142,14 @@ function startDetection(element) {
     }
 
     const result = await analyzeFace(element, detection.box);
+    const percent = Math.min(100, Math.max(0, result.risk * 100));
 
-    const riskPercent = Math.min(100, Math.max(0, result.risk * 100));
-
-    updateRisk(riskPercent);
+    updateRisk(percent);
 
     status.innerText = `
 Top Classification: ${result.label}
 Model Confidence: ${(result.confidence * 100).toFixed(2)}%
-Synthetic Risk: ${riskPercent.toFixed(1)}%
+Synthetic Risk: ${percent.toFixed(1)}%
     `;
   }, 1000);
 }
@@ -168,11 +160,11 @@ function updateRisk(value) {
   riskBar.style.width = value + "%";
 
   if (value > 60) {
-    riskBar.style.background = "#ff3b3b";   // High risk
+    riskBar.style.background = "#ff3b3b";
   } else if (value > 30) {
-    riskBar.style.background = "#ffaa00";   // Medium
+    riskBar.style.background = "#ffaa00";
   } else {
-    riskBar.style.background = "#00cc66";   // Low risk (likely human)
+    riskBar.style.background = "#00cc66";
   }
 }
 
