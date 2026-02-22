@@ -13,10 +13,12 @@ let mobilenetModel = null;
 /* ---------------- LOAD MODELS ---------------- */
 
 async function loadModels() {
-  // ✅ FIXED LINE (loads from your local /models folder)
+  // Load face detection model from local /models folder
   await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
 
+  // Load MobileNet
   mobilenetModel = await mobilenet.load();
+
   console.log("Models loaded successfully");
 }
 
@@ -28,10 +30,15 @@ tabs.forEach(tab => {
   tab.addEventListener("click", () => {
     tabs.forEach(t => t.classList.remove("active"));
     tab.classList.add("active");
+
     currentMode = tab.dataset.mode;
+
     stopDetection();
     resetUI();
-    if (currentMode === "live") startWebcam();
+
+    if (currentMode === "live") {
+      startWebcam();
+    }
   });
 });
 
@@ -52,13 +59,17 @@ function handleFile(file) {
     imagePreview.src = url;
     imagePreview.style.display = "block";
     video.style.display = "none";
-    imagePreview.onload = () => startDetection(imagePreview);
+
+    imagePreview.onload = () => {
+      startDetection(imagePreview);
+    };
   }
 
   if (currentMode === "video") {
     video.src = url;
     video.style.display = "block";
     imagePreview.style.display = "none";
+
     video.onloadeddata = () => {
       video.play();
       startDetection(video);
@@ -70,6 +81,7 @@ function handleFile(file) {
 
 async function startWebcam() {
   const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+
   video.srcObject = stream;
   video.style.display = "block";
   imagePreview.style.display = "none";
@@ -90,6 +102,7 @@ async function analyzeFace(element, box) {
   canvas.width = size;
   canvas.height = size;
 
+  // Crop face region into square
   ctx.drawImage(
     element,
     box.x,
@@ -105,10 +118,12 @@ async function analyzeFace(element, box) {
   const predictions = await mobilenetModel.classify(canvas);
 
   const topConfidence = predictions[0].probability;
+
+  // Higher confidence = more likely real
   const riskScore = 1 - topConfidence;
 
   return {
-    topLabel: predictions[0].className,
+    label: predictions[0].className,
     confidence: topConfidence,
     risk: riskScore
   };
@@ -124,7 +139,7 @@ function startDetection(element) {
 
     const detection = await faceapi.detectSingleFace(
       element,
-      new faceapi.TinyFaceDetectorOptions()
+      new faceapi.TinyFaceDetectorOptions({ inputSize: 416 })
     );
 
     if (!detection) {
@@ -135,14 +150,14 @@ function startDetection(element) {
 
     const result = await analyzeFace(element, detection.box);
 
-    const percent = Math.min(100, Math.max(0, result.risk * 100));
+    const riskPercent = Math.min(100, Math.max(0, result.risk * 100));
 
-    updateRisk(percent);
+    updateRisk(riskPercent);
 
     status.innerText = `
-Top Classification: ${result.topLabel}
+Top Classification: ${result.label}
 Model Confidence: ${(result.confidence * 100).toFixed(2)}%
-Synthetic Risk: ${percent.toFixed(1)}%
+Synthetic Risk: ${riskPercent.toFixed(1)}%
     `;
   }, 1000);
 }
@@ -153,11 +168,11 @@ function updateRisk(value) {
   riskBar.style.width = value + "%";
 
   if (value > 60) {
-    riskBar.style.background = "#ff3b3b";
+    riskBar.style.background = "#ff3b3b";   // High risk
   } else if (value > 30) {
-    riskBar.style.background = "#ffaa00";
+    riskBar.style.background = "#ffaa00";   // Medium
   } else {
-    riskBar.style.background = "#00cc66";
+    riskBar.style.background = "#00cc66";   // Low risk (likely human)
   }
 }
 
