@@ -8,25 +8,19 @@ const status = document.getElementById("status");
 
 let currentMode = "image";
 let detectionInterval = null;
-let deepfakeModel = null;
+let mobilenetModel = null;
 
 /* ---------------- LOAD MODELS ---------------- */
 
 async function loadModels() {
-  await faceapi.nets.tinyFaceDetector.loadFromUri(
-    "https://justadummyurl.com/models" // replace with your models folder if local
-  );
+  // ✅ FIXED LINE (loads from your local /models folder)
+  await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
+
+  mobilenetModel = await mobilenet.load();
+  console.log("Models loaded successfully");
 }
 
-async function loadDeepfakeModel() {
-  deepfakeModel = await tf.loadGraphModel(
-    "https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_100_224/classification/4/default/1",
-    { fromTFHub: true }
-  );
-  console.log("Deepfake model loaded");
-}
-
-loadDeepfakeModel();
+loadModels();
 
 /* ---------------- TAB SWITCHING ---------------- */
 
@@ -86,9 +80,9 @@ async function startWebcam() {
   };
 }
 
-/* ---------------- DEEPFAKE MODEL ---------------- */
+/* ---------------- ANALYSIS ---------------- */
 
-async function runDeepfakeModel(element, box) {
+async function analyzeFace(element, box) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
 
@@ -108,18 +102,16 @@ async function runDeepfakeModel(element, box) {
     size
   );
 
-  const tensor = tf.browser
-    .fromPixels(canvas)
-    .toFloat()
-    .div(255)
-    .expandDims(0);
+  const predictions = await mobilenetModel.classify(canvas);
 
-  const predictions = await deepfakeModel.predict(tensor);
-  const data = await predictions.data();
+  const topConfidence = predictions[0].probability;
+  const riskScore = 1 - topConfidence;
 
-  tf.dispose([tensor, predictions]);
-
-  return Math.max(...data);
+  return {
+    topLabel: predictions[0].className,
+    confidence: topConfidence,
+    risk: riskScore
+  };
 }
 
 /* ---------------- DETECTION LOOP ---------------- */
@@ -128,7 +120,7 @@ function startDetection(element) {
   stopDetection();
 
   detectionInterval = setInterval(async () => {
-    if (!deepfakeModel) return;
+    if (!mobilenetModel) return;
 
     const detection = await faceapi.detectSingleFace(
       element,
@@ -141,18 +133,15 @@ function startDetection(element) {
       return;
     }
 
-    const probability = await runDeepfakeModel(
-      element,
-      detection.box
-    );
+    const result = await analyzeFace(element, detection.box);
 
-    const riskScore = 1 - probability;
-    const percent = Math.min(100, Math.max(0, riskScore * 100));
+    const percent = Math.min(100, Math.max(0, result.risk * 100));
 
     updateRisk(percent);
 
     status.innerText = `
-AI Confidence: ${(probability * 100).toFixed(2)}%
+Top Classification: ${result.topLabel}
+Model Confidence: ${(result.confidence * 100).toFixed(2)}%
 Synthetic Risk: ${percent.toFixed(1)}%
     `;
   }, 1000);
