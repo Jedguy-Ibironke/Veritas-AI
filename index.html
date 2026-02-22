@@ -4,56 +4,57 @@
   <meta charset="UTF-8">
   <title>Veritas.ai - Deepfake Detection</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
 
-  <nav>
-    <div class="logo">🛡 Veritas.ai</div>
-  </nav>
+<nav>
+  <div class="logo">🛡 Veritas.ai</div>
+</nav>
 
-  <section class="hero">
-    <h1>Upload Media for Analysis</h1>
-    <p>AI-powered synthetic media detection running fully in-browser.</p>
+<section class="hero">
+  <h1>Upload Media for Analysis</h1>
 
-    <div class="tabs">
-      <button class="tab active" data-mode="image">Upload Photo</button>
-      <button class="tab" data-mode="video">Upload Video</button>
-      <button class="tab" data-mode="live">Live Camera</button>
+  <div class="tabs">
+    <button class="tab active" data-mode="image">Upload Photo</button>
+    <button class="tab" data-mode="video">Upload Video</button>
+    <button class="tab" data-mode="live">Live Camera</button>
+  </div>
+
+  <div id="uploadArea" class="upload-box">
+    <p>Click to upload</p>
+    <input type="file" id="fileInput" hidden>
+  </div>
+
+  <div class="media-wrapper">
+    <video id="video" autoplay muted playsinline></video>
+    <img id="imagePreview" />
+  </div>
+
+  <div class="analysis">
+    <div class="risk-container">
+      <div id="riskBar"></div>
     </div>
+    <pre id="status"></pre>
+  </div>
+</section>
 
-    <div id="uploadArea" class="upload-box">
-      <p>Drag & drop file here or click to browse</p>
-      <input type="file" id="fileInput" hidden>
-    </div>
+<!-- TensorFlow 3 (STABLE) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
 
-    <div class="media-wrapper">
-      <video id="video" autoplay muted playsinline></video>
-      <img id="imagePreview" />
-    </div>
+<!-- Force CPU backend (prevents engine crash) -->
+<script>
+  tf.setBackend('cpu');
+</script>
 
-    <div class="analysis">
-      <div class="risk-container">
-        <div id="riskBar"></div>
-      </div>
-      <pre id="status"></pre>
-    </div>
-  </section>
+<!-- Face API -->
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
-  <!-- ✅ TensorFlow 3.x (IMPORTANT) -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+<!-- MobileNet (stable older version) -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.0.4"></script>
 
-  <!-- ✅ Face API -->
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-
-  <!-- ✅ MobileNet (TF3 compatible) -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
-
-  <!-- App -->
-  <script type="module" src="app.js"></script>
+<!-- App -->
+<script type="module" src="app.js"></script>
 
 </body>
 </html>
