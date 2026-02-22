@@ -4,59 +4,46 @@
   <meta charset="UTF-8">
   <title>Veritas.ai - Deepfake Detection</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
-  <!-- Styles -->
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <!-- NAVBAR -->
-  <nav>
-    <div class="logo">🛡 Veritas.ai</div>
-  </nav>
+<nav>
+  <div class="logo">🛡 Veritas.ai</div>
+</nav>
 
-  <!-- HERO -->
-  <section class="hero">
-    <h1>Upload Media for Analysis</h1>
-    <p>
-      Our AI analyzes media across structural, behavioral, and texture signals
-      to detect synthetic manipulation.
-    </p>
+<section class="hero">
+  <h1>Upload Media for Analysis</h1>
+  <p>
+    Our AI analyzes structural, behavioral, and texture signals
+    to detect synthetic manipulation.
+  </p>
 
-    <!-- MODE TABS -->
-    <div class="tabs">
-      <button class="tab active" data-mode="image">Upload Photo</button>
-      <button class="tab" data-mode="video">Upload Video</button>
-      <button class="tab" data-mode="live">Live Camera Feed</button>
+  <div class="tabs">
+    <button class="tab active" data-mode="image">Upload Photo</button>
+    <button class="tab" data-mode="video">Upload Video</button>
+    <button class="tab" data-mode="live">Live Camera Feed</button>
+  </div>
+
+  <div id="uploadArea" class="upload-box">
+    <p>Drag & drop file here or click to browse</p>
+    <input type="file" id="fileInput" hidden>
+  </div>
+
+  <video id="video" autoplay muted playsinline></video>
+  <img id="imagePreview" />
+
+  <div class="analysis">
+    <div class="risk-container">
+      <div id="riskBar"></div>
     </div>
+    <pre id="status"></pre>
+  </div>
+</section>
 
-    <!-- UPLOAD AREA -->
-    <div id="uploadArea" class="upload-box">
-      <p>Drag & drop file here or click to browse</p>
-      <input type="file" id="fileInput" hidden>
-    </div>
-
-    <!-- MEDIA OUTPUT -->
-    <video id="video" autoplay muted playsinline></video>
-    <img id="imagePreview" />
-
-    <!-- ANALYSIS OUTPUT -->
-    <div class="analysis">
-      <div class="risk-container">
-        <div id="riskBar"></div>
-      </div>
-      <pre id="status"></pre>
-    </div>
-  </section>
-
-  <!-- Face API -->
-  <script defer src="face-api.js"></script>
-
-  <!-- Your Detection + UI Logic -->
-  <script type="module" src="app.js"></script>
+<script defer src="face-api.min.js"></script>
+<script type="module" src="app.js"></script>
 
 </body>
 </html>
