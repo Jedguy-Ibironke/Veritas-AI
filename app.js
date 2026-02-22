@@ -93,17 +93,28 @@ async function analyze(element) {
   if (!model) return;
 
   try {
-    const predictions = await model.classify(element);
+    // Get top 5 predictions instead of just 1
+    const predictions = await model.classify(element, 5);
 
-    const confidence = predictions[0].probability;
-    const risk = (1 - confidence) * 100;
+    // Calculate entropy (uncertainty)
+    let entropy = 0;
+    predictions.forEach(p => {
+      if (p.probability > 0) {
+        entropy += -p.probability * Math.log2(p.probability);
+      }
+    });
 
-    updateRisk(risk);
+    // Normalize entropy to a 0–100 scale (approximate)
+    const maxEntropy = Math.log2(5); // max entropy for 5 classes
+    const normalizedRisk = (entropy / maxEntropy) * 100;
+
+    updateRisk(normalizedRisk);
 
     status.innerText = `
-Top Classification: ${predictions[0].className}
-Model Confidence: ${(confidence * 100).toFixed(2)}%
-Synthetic Risk: ${risk.toFixed(1)}%
+Top Prediction: ${predictions[0].className}
+Confidence: ${(predictions[0].probability * 100).toFixed(2)}%
+Uncertainty (Entropy): ${entropy.toFixed(3)}
+Anomaly Risk: ${normalizedRisk.toFixed(1)}%
     `;
   } catch (err) {
     console.error("Analysis error:", err);
