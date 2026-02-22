@@ -1,15 +1,3 @@
-import {
-  computeBehavioralScore,
-  computeStructuralScore,
-  computeFaceTexture,
-  computeFrameTexture,
-  computeTextureScore
-} from "./metrics.js";
-
-import { computeISI, getRiskLabel } from "./scoring.js";
-
-/* ------------------ DOM ELEMENTS ------------------ */
-
 const tabs = document.querySelectorAll(".tab");
 const uploadArea = document.getElementById("uploadArea");
 const fileInput = document.getElementById("fileInput");
@@ -18,49 +6,44 @@ const imagePreview = document.getElementById("imagePreview");
 const riskBar = document.getElementById("riskBar");
 const status = document.getElementById("status");
 
-/* ------------------ STATE ------------------ */
-
 let currentMode = "image";
 let detectionInterval = null;
+let deepfakeModel = null;
 
-/* ------------------ LOAD MODELS ------------------ */
+/* ---------------- LOAD MODELS ---------------- */
 
 async function loadModels() {
-  await faceapi.nets.tinyFaceDetector.loadFromUri("./models");
-  await faceapi.nets.faceLandmark68Net.loadFromUri("./models");
-  console.log("Models loaded");
+  await faceapi.nets.tinyFaceDetector.loadFromUri(
+    "https://justadummyurl.com/models" // replace with your models folder if local
+  );
 }
 
-loadModels();
+async function loadDeepfakeModel() {
+  deepfakeModel = await tf.loadGraphModel(
+    "https://tfhub.dev/google/tfjs-model/imagenet/mobilenet_v2_100_224/classification/4/default/1",
+    { fromTFHub: true }
+  );
+  console.log("Deepfake model loaded");
+}
 
-/* ------------------ TAB SWITCHING ------------------ */
+loadDeepfakeModel();
+
+/* ---------------- TAB SWITCHING ---------------- */
 
 tabs.forEach(tab => {
   tab.addEventListener("click", () => {
     tabs.forEach(t => t.classList.remove("active"));
     tab.classList.add("active");
-
     currentMode = tab.dataset.mode;
-
     stopDetection();
     resetUI();
-
-    if (currentMode === "live") {
-      startWebcam();
-    }
+    if (currentMode === "live") startWebcam();
   });
 });
 
-/* ------------------ FILE UPLOAD ------------------ */
+/* ---------------- FILE HANDLING ---------------- */
 
 uploadArea.addEventListener("click", () => fileInput.click());
-
-uploadArea.addEventListener("dragover", e => e.preventDefault());
-
-uploadArea.addEventListener("drop", e => {
-  e.preventDefault();
-  handleFile(e.dataTransfer.files[0]);
-});
 
 fileInput.addEventListener("change", e => {
   handleFile(e.target.files[0]);
@@ -75,17 +58,13 @@ function handleFile(file) {
     imagePreview.src = url;
     imagePreview.style.display = "block";
     video.style.display = "none";
-
-    imagePreview.onload = () => {
-      startDetection(imagePreview);
-    };
+    imagePreview.onload = () => startDetection(imagePreview);
   }
 
   if (currentMode === "video") {
     video.src = url;
     video.style.display = "block";
     imagePreview.style.display = "none";
-
     video.onloadeddata = () => {
       video.play();
       startDetection(video);
@@ -93,39 +72,68 @@ function handleFile(file) {
   }
 }
 
-/* ------------------ WEBCAM ------------------ */
+/* ---------------- WEBCAM ---------------- */
 
 async function startWebcam() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    video.srcObject = stream;
-    video.style.display = "block";
-    imagePreview.style.display = "none";
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+  video.srcObject = stream;
+  video.style.display = "block";
+  imagePreview.style.display = "none";
 
-    video.onloadeddata = () => {
-      video.play();
-      startDetection(video);
-    };
-  } catch (err) {
-    console.error("Webcam error:", err);
-  }
+  video.onloadeddata = () => {
+    video.play();
+    startDetection(video);
+  };
 }
 
-/* ------------------ DETECTION LOOP ------------------ */
+/* ---------------- DEEPFAKE MODEL ---------------- */
+
+async function runDeepfakeModel(element, box) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  const size = 224;
+  canvas.width = size;
+  canvas.height = size;
+
+  ctx.drawImage(
+    element,
+    box.x,
+    box.y,
+    box.width,
+    box.height,
+    0,
+    0,
+    size,
+    size
+  );
+
+  const tensor = tf.browser
+    .fromPixels(canvas)
+    .toFloat()
+    .div(255)
+    .expandDims(0);
+
+  const predictions = await deepfakeModel.predict(tensor);
+  const data = await predictions.data();
+
+  tf.dispose([tensor, predictions]);
+
+  return Math.max(...data);
+}
+
+/* ---------------- DETECTION LOOP ---------------- */
 
 function startDetection(element) {
   stopDetection();
 
   detectionInterval = setInterval(async () => {
-    const detection = await faceapi
-      .detectSingleFace(
-        element,
-        new faceapi.TinyFaceDetectorOptions({
-          inputSize: 608,        // higher detail
-          scoreThreshold: 0.15   // more sensitive
-        })
-      )
-      .withFaceLandmarks();
+    if (!deepfakeModel) return;
+
+    const detection = await faceapi.detectSingleFace(
+      element,
+      new faceapi.TinyFaceDetectorOptions()
+    );
 
     if (!detection) {
       status.innerText = "No face detected...";
@@ -133,51 +141,38 @@ function startDetection(element) {
       return;
     }
 
-    const landmarks = detection.landmarks.positions;
+    const probability = await runDeepfakeModel(
+      element,
+      detection.box
+    );
 
-    const structural = computeStructuralScore(landmarks);
-    const behavioral = computeBehavioralScore(landmarks);
-    const faceTexture = computeFaceTexture(element, detection.detection.box);
-    const frameTexture = computeFrameTexture(element);
-    const texture = computeTextureScore(faceTexture, frameTexture);
-
-    const isi = computeISI({
-      structural,
-      behavioral,
-      texture
-    });
-
-    /* 🔥 INVERTED RISK LOGIC */
-    const riskScore = 1 - isi;
+    const riskScore = 1 - probability;
     const percent = Math.min(100, Math.max(0, riskScore * 100));
 
     updateRisk(percent);
 
     status.innerText = `
-Structural: ${structural.toFixed(2)}
-Behavioral: ${behavioral.toFixed(2)}
-Texture: ${texture.toFixed(2)}
-ISI (Stability): ${isi.toFixed(2)}
-Risk Level: ${getRiskLabel(isi)}
+AI Confidence: ${(probability * 100).toFixed(2)}%
+Synthetic Risk: ${percent.toFixed(1)}%
     `;
-  }, 700);
+  }, 1000);
 }
 
-/* ------------------ RISK BAR ------------------ */
+/* ---------------- RISK BAR ---------------- */
 
 function updateRisk(value) {
   riskBar.style.width = value + "%";
 
   if (value > 60) {
-    riskBar.style.background = "#ff3b3b"; // High Risk
+    riskBar.style.background = "#ff3b3b";
   } else if (value > 30) {
-    riskBar.style.background = "#ffaa00"; // Medium
+    riskBar.style.background = "#ffaa00";
   } else {
-    riskBar.style.background = "#00cc66"; // Stable
+    riskBar.style.background = "#00cc66";
   }
 }
 
-/* ------------------ CLEANUP ------------------ */
+/* ---------------- CLEANUP ---------------- */
 
 function stopDetection() {
   if (detectionInterval) {
